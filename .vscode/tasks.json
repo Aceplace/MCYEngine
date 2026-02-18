@@ -1,0 +1,36 @@
+{
+    "tasks": [
+        {
+            "type": "cppbuild",
+            "label": "Build",
+            "command": "cl.exe",
+            "args": [
+                "/Zi",
+                "/EHsc",
+                "/nologo",
+                "/Fe${fileDirname}\\${fileBasenameNoExtension}.exe",
+                "${file}"
+            ],
+            "options": {
+                "cwd": "${fileDirname}"
+            },
+            "problemMatcher": [
+                "$msCompile"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+        },
+        {
+            "label": "Debug with RemedyBG",
+            "type": "shell",
+            "command": "remedybg.exe",
+            "args": [
+                "${fileDirname}\\${fileBasenameNoExtension}.exe"
+            ],
+            "dependsOn": "C/C++: cl.exe build active file"
+        }
+    ],
+    "version": "2.0.0"
+}
