@@ -10,13 +10,14 @@
                 "/nologo",
                 "/Fe${workspaceFolder}\\mcy_engine.exe",
                 "${workspaceFolder}\\src\\main.cpp",
+                "/I%VULKAN_SDK%\\Include",
                 "/link",
                 "/SUBSYSTEM:WINDOWS",
+                "/LIBPATH:%VULKAN_SDK%\\Lib",
+                "vulkan-1.lib",
                 "user32.lib", 
                 "gdi32.lib", 
                 "kernel32.lib",
-                "&&",
-                "del /Q ${workspaceFolder}\\src\\main.obj ${workspaceFolder}\\main.ilk ${workspaceFolder}\\vc*.pdb"
 
             ],
             "options": {

@@ -1,14 +1,18 @@
 #include <iostream>
 #include <vector>
 #include <string>
+
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#define VK_USE_PLATFORM_WIN32_KHR
+#include <vulkan/vulkan.h>
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
+char messageBuffer[256];
+
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine, int nCmdShow)
 {
-    // Register the window class.
     const char* CLASS_NAME  = "Sample Window Class";
     
     WNDCLASSA wc = { };
@@ -18,8 +22,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
     wc.lpszClassName = CLASS_NAME;
 
     RegisterClassA(&wc);
-
-    // Create the window.
 
     HWND hwnd = CreateWindowExA(
         0,                              // Optional window styles.
@@ -43,14 +45,44 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
 
     ShowWindow(hwnd, nCmdShow);
 
-    // Run the message loop.
+    uint32_t extCount = 0;
+    VkResult vkResult = vkEnumerateInstanceExtensionProperties(nullptr, &extCount, nullptr);
+    sprintf_s(messageBuffer, "%u Vulkan instance extensions supported\n", 5);
+    OutputDebugString(messageBuffer);
+
+    const char* extensions[] = {
+        VK_KHR_SURFACE_EXTENSION_NAME,
+        VK_KHR_WIN32_SURFACE_EXTENSION_NAME
+    };
+
+    VkInstanceCreateInfo createInfo{};
+    createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+    createInfo.enabledExtensionCount = 2;
+    createInfo.ppEnabledExtensionNames = extensions;
+
+    VkInstance instance;
+    VkResult result = vkCreateInstance(&createInfo, nullptr, &instance);
+
+    if (result != VK_SUCCESS) {
+        OutputDebugStringA("Failed to create Vulkan instance\n");
+        return -1;
+    }
 
     MSG msg = { };
-    while (GetMessage(&msg, NULL, 0, 0) > 0)
+    bool running = true;
+    while (running)
     {
-        TranslateMessage(&msg);
-        DispatchMessage(&msg);
-    }
+        while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
+        {
+            if (msg.message == WM_QUIT)
+            {
+                running = false;
+                break;
+            }
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
+        }
+    }   
 
     return 0;
 }
