@@ -290,6 +290,23 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
         return -1;
     }
 
+    VkSurfaceCapabilitiesKHR vkSurfaceCapabilitiesKHR{}; 
+    vkResult = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(chosenDevice, surface, &vkSurfaceCapabilitiesKHR);
+    if (vkResult != VK_SUCCESS)
+    {
+        OutputDebugString("Could not get physical device surface capabilities\n");
+        return -1;
+    }
+    u32 surfaceFormatCount = 0;
+    vkResult = vkGetPhysicalDeviceSurfaceFormatsKHR(chosenDevice, surface, &surfaceFormatCount, nullptr);
+    if (vkResult != VK_SUCCESS || surfaceFormatCount == 0)
+    {
+        OutputDebugString("Could not get surface formats\n");
+        return -1;
+    }
+    VkSurfaceFormatKHR* surfaceFormats = new VkSurfaceFormatKHR[surfaceFormatCount];
+    vkResult = vkGetPhysicalDeviceSurfaceFormatsKHR(chosenDevice, surface, &surfaceFormatCount, surfaceFormats);
+
     u32 queueFamilyCount = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(chosenDevice, &queueFamilyCount, NULL);    
     VkQueueFamilyProperties* queueFamilies = new VkQueueFamilyProperties[queueFamilyCount];
@@ -326,7 +343,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
         OutputDebugString("Could not find present queue index\n");
         return -1;
     }
-
 
     float queuePriority = 0.5;
     
