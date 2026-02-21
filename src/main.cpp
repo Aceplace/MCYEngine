@@ -140,16 +140,36 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
         return -1;
     }
     OutputDebugString("Created Vulkan Instance\n");
+
+    VkSurfaceKHR surface = nullptr;
+    VkWin32SurfaceCreateInfoKHR win32SurfaceCreateInfo{};
+    win32SurfaceCreateInfo.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
+    win32SurfaceCreateInfo.pNext = nullptr;
+    win32SurfaceCreateInfo.flags = 0;
+    win32SurfaceCreateInfo.hwnd = hwnd;
+    win32SurfaceCreateInfo.hinstance = GetModuleHandle(nullptr);
+
+    vkResult = vkCreateWin32SurfaceKHR(vkInstance, &win32SurfaceCreateInfo, nullptr, &surface);
+    if (vkResult != VK_SUCCESS)
+    {
+        OutputDebugString("Could not create win32 surface\n");
+        return -1;
+    }
     
-    PFN_vkCreateDebugUtilsMessengerEXT pfnCreateDebugUtilsMessengerEXT = NULL;
-    pfnCreateDebugUtilsMessengerEXT = (PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(vkInstance, "vkCreateDebugUtilsMessengerEXT");
-    
+    PFN_vkCreateDebugUtilsMessengerEXT pfnCreateDebugUtilsMessengerEXT = nullptr;
+    pfnCreateDebugUtilsMessengerEXT = (PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(vkInstance, "vkCreateDebugUtilsMessengerEXT");    
     if (!pfnCreateDebugUtilsMessengerEXT)
     {
         OutputDebugString("Could not get function vkCreateDebugUtilsMessengerEXT\n");
         return -1;
     }
-    OutputDebugString("Could get function vkCreateDebugUtilsMessengerEXT\n");
+    PFN_vkDestroyDebugUtilsMessengerEXT pfnDestroyDebugUtilsMessengerEXT = nullptr;
+    pfnDestroyDebugUtilsMessengerEXT = (PFN_vkDestroyDebugUtilsMessengerEXT) vkGetInstanceProcAddr(vkInstance, "vkDestroyDebugUtilsMessengerEXT");
+    if (!pfnDestroyDebugUtilsMessengerEXT)
+    {
+        OutputDebugString("Could not get function vkDestroyDebugUtilsMessengerEXT\n");
+        return -1;
+    }
 
     VkDebugUtilsMessengerCreateInfoEXT vkDebugUtilsMessengerCreateInfoEXT;
     vkDebugUtilsMessengerCreateInfoEXT.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
@@ -272,18 +292,27 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
 
     u32 queueFamilyCount = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(chosenDevice, &queueFamilyCount, NULL);    
-    vkGetPhysicalDeviceQueueFamilyProperties(chosenDevice, &queueFamilyCount, NULL);
     VkQueueFamilyProperties* queueFamilies = new VkQueueFamilyProperties[queueFamilyCount];
     vkGetPhysicalDeviceQueueFamilyProperties(chosenDevice, &queueFamilyCount, queueFamilies);
     s32 graphicsIndex = -1;
+    s32 presentIndex = -1;
 
     for (s32 i = 0; i < queueFamilyCount; i++)
     {
-        if (queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
+        bool hasGraphics = (queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0;
+        VkBool32 presentSupport = VK_FALSE;
+        vkGetPhysicalDeviceSurfaceSupportKHR(chosenDevice, i, surface, &presentSupport);
+
+        if (hasGraphics && graphicsIndex == -1)
+            graphicsIndex = i;
+        if (presentSupport == VK_TRUE && presentIndex == -1)
+            presentIndex = i;
+        if (hasGraphics && presentSupport == VK_TRUE)
         {
             graphicsIndex = i;
-            break;
+            presentIndex = i;
         }
+            
     }
     delete[] queueFamilies;
 
@@ -292,15 +321,43 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
         OutputDebugString("Could not find graphics queue index\n");
         return -1;
     }
+    if (presentIndex == -1)
+    {
+        OutputDebugString("Could not find present queue index\n");
+        return -1;
+    }
+
 
     float queuePriority = 0.5;
-    VkDeviceQueueCreateInfo vkDeviceQueueCreateInfo;
-    vkDeviceQueueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-    vkDeviceQueueCreateInfo.pNext = nullptr;
-    vkDeviceQueueCreateInfo.flags = 0;
-    vkDeviceQueueCreateInfo.queueFamilyIndex = graphicsIndex;
-    vkDeviceQueueCreateInfo.queueCount = 1;
-    vkDeviceQueueCreateInfo.pQueuePriorities = &queuePriority;
+    
+    VkDeviceQueueCreateInfo graphicsQueueCreateInfo;
+    graphicsQueueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+    graphicsQueueCreateInfo.pNext = nullptr;
+    graphicsQueueCreateInfo.flags = 0;
+    graphicsQueueCreateInfo.queueFamilyIndex = graphicsIndex;
+    graphicsQueueCreateInfo.queueCount = 1;
+    graphicsQueueCreateInfo.pQueuePriorities = &queuePriority;
+
+    VkDeviceQueueCreateInfo queueCreateInfos[2];
+    uint32_t queueCreateInfoCount = 0;
+    if (graphicsIndex == presentIndex) 
+    {
+        queueCreateInfos[0] = graphicsQueueCreateInfo;
+        queueCreateInfoCount = 1;
+    } 
+    else 
+    {
+        queueCreateInfos[0] = graphicsQueueCreateInfo;
+        VkDeviceQueueCreateInfo presentQueueCreateInfo = {};
+        presentQueueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+        presentQueueCreateInfo.pNext = nullptr;
+        presentQueueCreateInfo.flags = 0;
+        presentQueueCreateInfo.queueFamilyIndex = presentIndex;
+        presentQueueCreateInfo.queueCount = 1;
+        presentQueueCreateInfo.pQueuePriorities = &queuePriority;
+        queueCreateInfos[1] = presentQueueCreateInfo;
+        queueCreateInfoCount = 2;
+    }
 
     VkPhysicalDeviceFeatures2 vkPhysicalDeviceFeatures2;
     vkPhysicalDeviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
@@ -338,8 +395,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
     vkDeviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     vkDeviceCreateInfo.pNext = &vkPhysicalDeviceFeatures2;
     vkDeviceCreateInfo.flags = 0;
-    vkDeviceCreateInfo.queueCreateInfoCount = 1;
-    vkDeviceCreateInfo.pQueueCreateInfos = &vkDeviceQueueCreateInfo;
+    vkDeviceCreateInfo.queueCreateInfoCount = queueCreateInfoCount;
+    vkDeviceCreateInfo.pQueueCreateInfos = queueCreateInfos;
     vkDeviceCreateInfo.enabledLayerCount = 0;
     vkDeviceCreateInfo.ppEnabledLayerNames = nullptr;
     vkDeviceCreateInfo.enabledExtensionCount = ARRAY_COUNT(deviceExtensions);
@@ -356,17 +413,18 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
     }
 
     VkQueue graphicsQueue = nullptr;
+    VkQueue presentQueue = nullptr;
     vkGetDeviceQueue(vkDevice, graphicsIndex, 0, &graphicsQueue);
+    vkGetDeviceQueue(vkDevice, presentIndex, 0, &presentQueue);
 
     if (!graphicsQueue)
     {
         OutputDebugString("Could not get graphics queue\n");
         return -1;
     }
-
-    if (vkResult != VK_SUCCESS)
+    if (!presentQueue)
     {
-        OutputDebugString("Could not create logical device\n");
+        OutputDebugString("Could not get present queue\n");
         return -1;
     }
 
@@ -385,6 +443,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
             DispatchMessage(&msg);
         }
     }   
+
+    vkDestroySurfaceKHR(vkInstance, surface, NULL);
+    pfnDestroyDebugUtilsMessengerEXT(vkInstance, vKDebugUtilsMessengerExt, NULL);
+    vkDestroyDevice(vkDevice, NULL);
+    vkDestroyInstance(vkInstance, NULL);
 
     return 0;
 }
