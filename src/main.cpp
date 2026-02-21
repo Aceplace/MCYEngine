@@ -554,9 +554,42 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
     }
     swapChainImages = new VkImage[swapChainImagesCount];
     vkResult = vkGetSwapchainImagesKHR(vkDevice, swapChain, &swapChainImagesCount, swapChainImages);
-
     VkFormat swapChainImageFormat = surfaceFormat.format;
     VkExtent2D swapChainExtent = extent;
+
+    VkImageSubresourceRange imageSubresourceRanger = {};
+    imageSubresourceRanger.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    imageSubresourceRanger.baseMipLevel = 0;
+    imageSubresourceRanger.levelCount = 1;
+    imageSubresourceRanger.baseArrayLayer = 0;
+    imageSubresourceRanger.layerCount = 1;
+
+    VkImageViewCreateInfo imageViewCreateInfo = {};
+    imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    imageViewCreateInfo.pNext = nullptr;
+    imageViewCreateInfo.flags = 0;
+    imageViewCreateInfo.image = VK_NULL_HANDLE;
+    imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    imageViewCreateInfo.format = swapChainImageFormat;
+    imageViewCreateInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+    imageViewCreateInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+    imageViewCreateInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+    imageViewCreateInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+    imageViewCreateInfo.subresourceRange = imageSubresourceRanger;
+
+    VkImageView* swapChainImageViews = new VkImageView[swapChainImagesCount];
+    for (u32 i = 0; i < swapChainImagesCount; i++)
+    {
+        VkImage currentImage = swapChainImages[i];
+        imageViewCreateInfo.image = currentImage;
+
+         vkResult = vkCreateImageView(vkDevice, &imageViewCreateInfo, nullptr, &swapChainImageViews[i]);
+         if (vkResult != VK_SUCCESS)
+         {
+            OutputDebugString("Failed to create an image view for swap buffer image");
+            return -1;
+         }
+    }
 
     MSG msg = { };
     bool running = true;
