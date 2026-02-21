@@ -4,7 +4,7 @@
       "name": "Win32",
       "includePath": [
         "${workspaceFolder}/**",
-        "${env:VULKAN_SDK}\\Include",
+        "${env:VULKAN_SDK}/Include",
         "${workspaceFolder}/src/vendor/glm/**"
       ],
       "defines": [
