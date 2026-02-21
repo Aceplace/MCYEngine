@@ -20,6 +20,33 @@
 
 uint32_t pupp = 0;
 #define ARRAY_COUNT(arr) (sizeof(arr) / sizeof((arr)[0]))
+#include <cmath>
+
+template<typename T>
+T Clamp(T value, T min, T max)
+{
+    if (value < min) 
+        return min;
+    if (value > max)
+        return max;
+    return value;
+}
+
+template<typename T>
+T Max(T value1, T value2)
+{
+    if (value1 > value2) 
+        return value1;
+    return value2;
+}
+
+template<typename T>
+T Min(T value1, T value2)
+{
+    if (value1 < value2) 
+        return value1;
+    return value2;
+}
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
@@ -38,6 +65,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL VulkanDebgCallback(
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine, int nCmdShow)
 {
     const char* CLASS_NAME  = "Sample Window Class";
+    int x = 10;
     
     WNDCLASSA wc = { };
 
@@ -213,7 +241,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
         VK_KHR_SWAPCHAIN_EXTENSION_NAME
     };
 
-    VkPhysicalDevice chosenDevice = nullptr;
+    VkPhysicalDevice physicalDevice = nullptr;
     for (u32 i = 0; i < vkPhysicalDeviceCount; i++)
     {
         VkPhysicalDevice vkPhysicalDevice = vkPhysicalDevices[i];
@@ -278,39 +306,96 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
         if (!foundAllExtensions)
             continue;
 
-        chosenDevice = vkPhysicalDevice;
+        physicalDevice = vkPhysicalDevice;
         break;
     }
 
     delete[] vkPhysicalDevices;
 
-    if (chosenDevice == nullptr)
+    if (physicalDevice == nullptr)
     {
         OutputDebugString("Could not find sutiable physical devices\n");
         return -1;
     }
 
-    VkSurfaceCapabilitiesKHR vkSurfaceCapabilitiesKHR{}; 
-    vkResult = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(chosenDevice, surface, &vkSurfaceCapabilitiesKHR);
-    if (vkResult != VK_SUCCESS)
-    {
-        OutputDebugString("Could not get physical device surface capabilities\n");
-        return -1;
-    }
     u32 surfaceFormatCount = 0;
-    vkResult = vkGetPhysicalDeviceSurfaceFormatsKHR(chosenDevice, surface, &surfaceFormatCount, nullptr);
+    vkResult = vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, &surfaceFormatCount, nullptr);
     if (vkResult != VK_SUCCESS || surfaceFormatCount == 0)
     {
         OutputDebugString("Could not get surface formats\n");
         return -1;
     }
     VkSurfaceFormatKHR* surfaceFormats = new VkSurfaceFormatKHR[surfaceFormatCount];
-    vkResult = vkGetPhysicalDeviceSurfaceFormatsKHR(chosenDevice, surface, &surfaceFormatCount, surfaceFormats);
+    vkResult = vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, &surfaceFormatCount, surfaceFormats);
+
+    bool foundGoodSurfaceFormat = false;
+    VkSurfaceFormatKHR chosenSurfaceFormat;
+    for (u32 i = 0; i < surfaceFormatCount; i++)
+    {
+        VkSurfaceFormatKHR* currentFormat = &surfaceFormats[i];
+        if (currentFormat->format ==VK_FORMAT_R8G8B8A8_SRGB && currentFormat->colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+        {
+            foundGoodSurfaceFormat = true;
+            chosenSurfaceFormat = *currentFormat;
+            break;
+        }
+    }
+
+    if (!foundGoodSurfaceFormat)
+        chosenSurfaceFormat = surfaceFormats[0];
+
+    VkSurfaceCapabilitiesKHR surfaceCapabilities{}; 
+    vkResult = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, surface, &surfaceCapabilities);
+    if (vkResult != VK_SUCCESS)
+    {
+        OutputDebugString("Could not get physical device surface capabilities\n");
+        return -1;
+    }
+    VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR;
+
+    VkExtent2D extent{};
+    if (surfaceCapabilities.currentExtent.width != UINT32_MAX)
+    {
+        extent = surfaceCapabilities.currentExtent;
+    }
+    else
+    {
+        RECT rect;
+        GetClientRect(hwnd, &rect);
+        u32 width  = u32(rect.right  - rect.left);
+        u32 height = u32(rect.bottom - rect.top);
+
+        extent.width = Clamp(width, surfaceCapabilities.minImageExtent.width, surfaceCapabilities.maxImageExtent.width);
+        extent.height = Clamp(height, surfaceCapabilities.minImageExtent.height, surfaceCapabilities.maxImageExtent.height);
+    }
+
+    u32 imageCount = surfaceCapabilities.minImageCount + 1;
+    imageCount = Clamp(imageCount, surfaceCapabilities.minImageCount, surfaceCapabilities.maxImageCount);
+
+    VkSwapchainCreateInfoKHR swapChain = {};
+    swapChain.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+    swapChain.pNext = nullptr;
+    swapChain.flags = 0;
+    swapChain.surface = surface;
+    swapChain.minImageCount = imageCount;
+    swapChain.imageFormat = chosenSurfaceFormat.format;
+    swapChain.imageColorSpace = chosenSurfaceFormat.colorSpace;
+    swapChain.imageExtent = extent;
+    swapChain.imageArrayLayers = 1;
+    swapChain.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    swapChain.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    swapChain.queueFamilyIndexCount = 0;
+    swapChain.pQueueFamilyIndices = nullptr;
+    swapChain.preTransform = surfaceCapabilities.currentTransform;
+    swapChain.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+    swapChain.presentMode = presentMode;
+    swapChain.clipped = true;
+    swapChain.oldSwapchain = nullptr;
 
     u32 queueFamilyCount = 0;
-    vkGetPhysicalDeviceQueueFamilyProperties(chosenDevice, &queueFamilyCount, NULL);    
+    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, NULL);    
     VkQueueFamilyProperties* queueFamilies = new VkQueueFamilyProperties[queueFamilyCount];
-    vkGetPhysicalDeviceQueueFamilyProperties(chosenDevice, &queueFamilyCount, queueFamilies);
+    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, queueFamilies);
     s32 graphicsIndex = -1;
     s32 presentIndex = -1;
 
@@ -318,7 +403,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
     {
         bool hasGraphics = (queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0;
         VkBool32 presentSupport = VK_FALSE;
-        vkGetPhysicalDeviceSurfaceSupportKHR(chosenDevice, i, surface, &presentSupport);
+        vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, i, surface, &presentSupport);
 
         if (hasGraphics && graphicsIndex == -1)
             graphicsIndex = i;
@@ -329,7 +414,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
             graphicsIndex = i;
             presentIndex = i;
         }
-            
     }
     delete[] queueFamilies;
 
@@ -345,7 +429,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
     }
 
     float queuePriority = 0.5;
-    
     VkDeviceQueueCreateInfo graphicsQueueCreateInfo;
     graphicsQueueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
     graphicsQueueCreateInfo.pNext = nullptr;
@@ -420,7 +503,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
     vkDeviceCreateInfo.pEnabledFeatures = nullptr;
 
     VkDevice vkDevice;
-    vkResult = vkCreateDevice(chosenDevice, &vkDeviceCreateInfo, nullptr, &vkDevice);
+    vkResult = vkCreateDevice(physicalDevice, &vkDeviceCreateInfo, nullptr, &vkDevice);
 
     if (vkResult != VK_SUCCESS)
     {
