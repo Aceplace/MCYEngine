@@ -1,6 +1,11 @@
 {
     "tasks": [
         {
+            "label": "Clean",
+            "type": "shell",
+            "command": "./clean.bat",
+        },
+        {
             "type": "cppbuild",
             "label": "Build",
             "command": "cl.exe",
@@ -28,9 +33,20 @@
             ],
             "group": {
                 "kind": "build",
-                "isDefault": true
             },
         },
+        {
+            "label": "Rebuild",
+            "dependsOn": [
+                "Build",
+                "Clean"
+            ],
+            "dependsOrder": "sequence",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        }
     ],
     "version": "2.0.0"
 }

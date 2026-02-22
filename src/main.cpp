@@ -1,11 +1,15 @@
 #include <iostream>
 #include <vector>
 #include <string>
+#include <fstream>
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #define VK_USE_PLATFORM_WIN32_KHR
 #include <vulkan/vulkan.h>
+// #include <vulkan/vulkan.hpp>
+// #include <vulkan/vulkan_raii.hpp>
+
 #include <glm/vec4.hpp>
 #include <glm/mat4x4.hpp>
 
@@ -17,6 +21,7 @@
 #define u16 uint16_t
 #define u32 uint32_t
 #define u64 uint64_t
+#define st size_t
 
 uint32_t pupp = 0;
 #define ARRAY_COUNT(arr) (sizeof(arr) / sizeof((arr)[0]))
@@ -46,6 +51,65 @@ T Min(T value1, T value2)
     if (value1 < value2) 
         return value1;
     return value2;
+}
+
+bool ReadEntireShaderFile(const char* fileName, char** bufferOut, st* sizeOut)
+{
+    char errorBuffer[512];
+
+    *bufferOut = nullptr;
+    *sizeOut = 0;
+
+    FILE* file = fopen(fileName, "rb");
+    if (!file)
+    {
+        sprintf_s(errorBuffer, "Could not load file: %s\n", fileName);
+        OutputDebugString(errorBuffer);
+        return false;
+    }
+    
+    std::fseek(file, 0, SEEK_END);
+    long fileSize = ftell(file);
+    if (fileSize < 0)
+    {
+        sprintf_s(errorBuffer, "Invalid file size: %s\n", fileName);
+        OutputDebugString(errorBuffer);
+        std::fclose(file);
+        return false;
+    }
+    *sizeOut = (st)fileSize;
+
+    fseek(file, 0, SEEK_SET);
+    *bufferOut = new char[*sizeOut];
+
+    size_t bytesRead = std::fread(*bufferOut, 1, *sizeOut, file);
+    std::fclose(file);
+
+    if (bytesRead != *sizeOut)
+    {
+        delete[] *bufferOut;
+        *bufferOut = nullptr;
+        sizeOut = 0;
+        sprintf_s(errorBuffer, "Could not read all bytes: %s\n", fileName);
+        OutputDebugString(errorBuffer);
+        return false; 
+    }
+
+    return true;
+}
+
+static std::vector<char> readFile(const std::string& filename) {
+    std::ifstream file(filename, std::ios::ate | std::ios::binary);
+
+    if (!file.is_open()) {
+        throw std::runtime_error("failed to open file!");
+    }
+
+    std::vector<char> buffer(file.tellg());
+    file.seekg(0, std::ios::beg);
+    file.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
+    file.close();
+    return buffer;
 }
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -590,6 +654,43 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
             return -1;
          }
     }
+
+    char* fileBytes = nullptr;
+    st fileSize = 0;
+    // auto shaderCode = readFile("slang.spv");
+    // bool result = ReadEntireShaderFile("vert.spv", &fileBytes, &fileSize);
+    bool result = ReadEntireShaderFile("slang.spv", &fileBytes, &fileSize);
+
+    if (!result)
+    {
+        OutputDebugString("Failed to read shader file\n");
+        return -1;
+    }
+
+    VkShaderModuleCreateInfo shaderModuleCreateInfo = {};
+    shaderModuleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    shaderModuleCreateInfo.pNext = nullptr;
+    shaderModuleCreateInfo.flags = 0;
+    shaderModuleCreateInfo.codeSize = fileSize;
+    shaderModuleCreateInfo.pCode = (u32*)fileBytes;
+    // shaderModuleCreateInfo.codeSize = shaderCode.size();
+    // shaderModuleCreateInfo.pCode = reinterpret_cast<const uint32_t*>(shaderCode.data());
+
+    VkShaderModule shaderModule = VK_NULL_HANDLE;
+    vkResult = vkCreateShaderModule(vkDevice, &shaderModuleCreateInfo, nullptr, &shaderModule);
+
+    // if (vkResult != VK_SUCCESS)
+    // {
+    //     OutputDebugString("Failed to create shader module\n");
+    //     return -1;
+    // }
+
+    // vk::ShaderModuleCreateInfo createInfo{}; 
+    // createInfo.codeSize = shaderCode.size() * sizeof(char); 
+    // createInfo.pCode = reinterpret_cast<const uint32_t*>(shaderCode.data());
+    
+
+    // vk::raii::ShaderModule shaderModule(vkDevice, createInfo, nullptr);
 
     MSG msg = { };
     bool running = true;
