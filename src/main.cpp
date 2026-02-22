@@ -7,8 +7,6 @@
 #include <windows.h>
 #define VK_USE_PLATFORM_WIN32_KHR
 #include <vulkan/vulkan.h>
-// #include <vulkan/vulkan.hpp>
-// #include <vulkan/vulkan_raii.hpp>
 
 #include <glm/vec4.hpp>
 #include <glm/mat4x4.hpp>
@@ -96,20 +94,6 @@ bool ReadEntireShaderFile(const char* fileName, char** bufferOut, st* sizeOut)
     }
 
     return true;
-}
-
-static std::vector<char> readFile(const std::string& filename) {
-    std::ifstream file(filename, std::ios::ate | std::ios::binary);
-
-    if (!file.is_open()) {
-        throw std::runtime_error("failed to open file!");
-    }
-
-    std::vector<char> buffer(file.tellg());
-    file.seekg(0, std::ios::beg);
-    file.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
-    file.close();
-    return buffer;
 }
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -673,24 +657,36 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
     shaderModuleCreateInfo.flags = 0;
     shaderModuleCreateInfo.codeSize = fileSize;
     shaderModuleCreateInfo.pCode = (u32*)fileBytes;
-    // shaderModuleCreateInfo.codeSize = shaderCode.size();
-    // shaderModuleCreateInfo.pCode = reinterpret_cast<const uint32_t*>(shaderCode.data());
 
     VkShaderModule shaderModule = VK_NULL_HANDLE;
     vkResult = vkCreateShaderModule(vkDevice, &shaderModuleCreateInfo, nullptr, &shaderModule);
+    if (vkResult != VK_SUCCESS)
+    {
+        OutputDebugString("Failed to create shader module\n");
+        return -1;
+    }
 
-    // if (vkResult != VK_SUCCESS)
-    // {
-    //     OutputDebugString("Failed to create shader module\n");
-    //     return -1;
-    // }
+    VkPipelineShaderStageCreateInfo vertShaderStageInfo = {};
+    vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    vertShaderStageInfo.pNext = nullptr;
+    vertShaderStageInfo.flags = 0;
+    vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+    vertShaderStageInfo.module = shaderModule;
+    vertShaderStageInfo.pName = "vertMain";
+    vertShaderStageInfo.pSpecializationInfo = nullptr;
 
-    // vk::ShaderModuleCreateInfo createInfo{}; 
-    // createInfo.codeSize = shaderCode.size() * sizeof(char); 
-    // createInfo.pCode = reinterpret_cast<const uint32_t*>(shaderCode.data());
-    
+    VkPipelineShaderStageCreateInfo fragShaderStageInfo = {};
+    fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    fragShaderStageInfo.pNext = nullptr;
+    fragShaderStageInfo.flags = 0;
+    fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    fragShaderStageInfo.module = shaderModule;
+    fragShaderStageInfo.pName = "fragMain";
+    fragShaderStageInfo.pSpecializationInfo = nullptr;
 
-    // vk::raii::ShaderModule shaderModule(vkDevice, createInfo, nullptr);
+    VkPipelineShaderStageCreateInfo shaderStages[] = {
+        vertShaderStageInfo, fragShaderStageInfo
+    };
 
     MSG msg = { };
     bool running = true;
@@ -709,7 +705,19 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
     }   
 
     vkDeviceWaitIdle(vkDevice);
+
+    vkDestroyShaderModule(vkDevice, shaderModule, nullptr);
+    for (u32 i = 0; i < swapChainImagesCount; i++)
+    {
+        if (swapChainImageViews[i] != VK_NULL_HANDLE)
+        {
+            vkDestroyImageView(vkDevice, swapChainImageViews[i], nullptr);
+        }
+    }
+    delete[] swapChainImageViews;
     vkDestroySwapchainKHR(vkDevice, swapChain, nullptr);
+    delete[] swapChainImages;
+    delete[] fileBytes;
     vkDestroyDevice(vkDevice, NULL);
     vkDestroySurfaceKHR(vkInstance, surface, NULL);
     pfnDestroyDebugUtilsMessengerEXT(vkInstance, vKDebugUtilsMessengerExt, NULL);
