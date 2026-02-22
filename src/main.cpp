@@ -791,6 +791,50 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
     pipelineLayoutCreateInfo.pSetLayouts = nullptr;
     pipelineLayoutCreateInfo.pushConstantRangeCount = 0;
     pipelineLayoutCreateInfo.pPushConstantRanges = nullptr;
+    vkResult = vkCreatePipelineLayout(vkDevice, &pipelineLayoutCreateInfo, nullptr, &pipelineLayout);
+    if (vkResult != VK_SUCCESS)
+    {
+        OutputDebugString("Could not create pipeline layout");
+        return -1;
+    }
+
+    VkPipelineRenderingCreateInfo pipelineRenderingCreateInfo = {};
+    pipelineRenderingCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
+    pipelineRenderingCreateInfo.pNext = nullptr;
+    pipelineRenderingCreateInfo.viewMask = 0;
+    pipelineRenderingCreateInfo.colorAttachmentCount = 1;
+    pipelineRenderingCreateInfo.pColorAttachmentFormats = &swapChainImageFormat;
+    pipelineRenderingCreateInfo.depthAttachmentFormat = VK_FORMAT_UNDEFINED;
+    pipelineRenderingCreateInfo.stencilAttachmentFormat = VK_FORMAT_UNDEFINED;
+
+    VkGraphicsPipelineCreateInfo graphicsPipelineCreateInfo = {};
+    graphicsPipelineCreateInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    graphicsPipelineCreateInfo.pNext = &pipelineRenderingCreateInfo;
+    graphicsPipelineCreateInfo.flags = 0;
+    graphicsPipelineCreateInfo.stageCount = 2;
+    graphicsPipelineCreateInfo.pStages = shaderStages;
+    graphicsPipelineCreateInfo.pVertexInputState = &pipelineVertexInputStateCreateInfo;
+    graphicsPipelineCreateInfo.pInputAssemblyState = &pipelineInputAssemblyStateCreateInfo;
+    graphicsPipelineCreateInfo.pTessellationState = nullptr;
+    graphicsPipelineCreateInfo.pViewportState = &pipelineViewportStateCreateInfo;
+    graphicsPipelineCreateInfo.pRasterizationState = &pipelineRasterizationStateCreateInfo;
+    graphicsPipelineCreateInfo.pMultisampleState = &pipelineMultisampleStateCreateInfo;
+    graphicsPipelineCreateInfo.pDepthStencilState = nullptr;
+    graphicsPipelineCreateInfo.pColorBlendState = &pipelineColorBlendStateCreateInfo;
+    graphicsPipelineCreateInfo.pDynamicState = &pipelineDynamicStateCreateInfo;
+    graphicsPipelineCreateInfo.layout = pipelineLayout;
+    graphicsPipelineCreateInfo.renderPass = VK_NULL_HANDLE;
+    graphicsPipelineCreateInfo.subpass = 0;
+    graphicsPipelineCreateInfo.basePipelineHandle = VK_NULL_HANDLE;
+    graphicsPipelineCreateInfo.basePipelineIndex = -1;
+
+    VkPipeline graphicsPipeline = VK_NULL_HANDLE;
+    vkResult = vkCreateGraphicsPipelines(vkDevice, VK_NULL_HANDLE, 1, &graphicsPipelineCreateInfo, nullptr, &graphicsPipeline);
+    if (vkResult != VK_SUCCESS)
+    {
+        OutputDebugString("Could not create graphics pipeline");
+        return -1;
+    }
 
     MSG msg = { };
     bool running = true;
