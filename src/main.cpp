@@ -1004,7 +1004,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
         return -1;
     }
 
-    RecordCommandBuffer();
+    // RecordCommandBuffer();
 
     VkSemaphore renderFinishedSemaphore = VK_NULL_HANDLE;
     VkSemaphore presentCompleteSemaphore = VK_NULL_HANDLE;
@@ -1041,8 +1041,36 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
             TranslateMessage(&msg);
             DispatchMessage(&msg);
 
-            // VkResult fenceResult = vkWaitForFences(vkDevice, 1, &drawFence, true, UINT64_MAX);
-            // vkAcquireNextImageKHR(vkDevice, swapChain, UINT64_MAX, presentCompleteSemaphore, VK_NULL_HANDLE, &imageIndex);
+            VkResult fenceResult = vkWaitForFences(vkDevice, 1, &drawFence, true, UINT64_MAX);
+            vkAcquireNextImageKHR(vkDevice, swapChain, UINT64_MAX, presentCompleteSemaphore, VK_NULL_HANDLE, &imageIndex);
+            RecordCommandBuffer();
+            vkResetFences(vkDevice, 1, &drawFence);
+
+            VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+            VkSubmitInfo submitInfo = {};
+            submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+            submitInfo.pNext = nullptr;
+            submitInfo.waitSemaphoreCount = 1;
+            submitInfo.pWaitSemaphores = &presentCompleteSemaphore;
+            submitInfo.pWaitDstStageMask = waitStages;
+            submitInfo.commandBufferCount = 1;
+            submitInfo.pCommandBuffers = &commandBuffer;
+            submitInfo.signalSemaphoreCount = 1;
+            submitInfo.pSignalSemaphores = &renderFinishedSemaphore;
+
+            vkQueueSubmit(graphicsQueue, 1, & submitInfo, drawFence);
+
+            VkPresentInfoKHR presentInfo = {};
+            presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+            presentInfo.pNext = nullptr;
+            presentInfo.waitSemaphoreCount = 1;
+            presentInfo.pWaitSemaphores = &renderFinishedSemaphore;
+            presentInfo.swapchainCount = 1;
+            presentInfo.pSwapchains = &swapChain;
+            presentInfo.pImageIndices = &imageIndex;
+            presentInfo.pResults = nullptr;
+
+            vkResult = vkQueuePresentKHR(presentQueue, &presentInfo);
         }
     }   
 
