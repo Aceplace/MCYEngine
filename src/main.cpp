@@ -664,26 +664,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
         OutputDebugString("Failed to read shader file\n");
         return -1;
     }
-    // char* vertFileBytes = nullptr;
-    // st vertFileSize = 0;
-    // auto shaderCode = readFile("slang.spv");
-    // bool result = ReadEntireShaderFile("vert.spv", &fileBytes, &fileSize);
-    // bool result = ReadEntireFile("vert.spv", &vertFileBytes, &vertFileSize);
-    // if (!result)
-    // {
-    //     OutputDebugString("Failed to read shader file\n");
-    //     return -1;
-    // }
-    // char* fragFileBytes = nullptr;
-    // st fragFileSize = 0;
-    // auto shaderCode = readFile("slang.spv");
-    // bool result = ReadEntireShaderFile("vert.spv", &fileBytes, &fileSize);
-    // result = ReadEntireFile("frag.spv", &fragFileBytes, &fragFileSize);
-    // if (!result)
-    // {
-    //     OutputDebugString("Failed to read shader file\n");
-    //     return -1;
-    // }
 
     VkShaderModuleCreateInfo shaderModuleCreateInfo = {};
     shaderModuleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
@@ -699,54 +679,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
         OutputDebugString("Failed to create shader module\n");
         return -1;
     }
-
-    // VkShaderModuleCreateInfo shaderModuleCreateInfo = {};
-    // shaderModuleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    // shaderModuleCreateInfo.pNext = nullptr;
-    // shaderModuleCreateInfo.flags = 0;
-    // shaderModuleCreateInfo.codeSize = vertFileSize;
-    // shaderModuleCreateInfo.pCode = (u32*)vertFileBytes;
-
-    // VkShaderModule vertShaderModule = VK_NULL_HANDLE;
-    // vkResult = vkCreateShaderModule(vkDevice, &shaderModuleCreateInfo, nullptr, &vertShaderModule);
-    // if (vkResult != VK_SUCCESS)
-    // {
-    //     OutputDebugString("Failed to create shader module\n");
-    //     return -1;
-    // }
-
-    // shaderModuleCreateInfo = {};
-    // shaderModuleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    // shaderModuleCreateInfo.pNext = nullptr;
-    // shaderModuleCreateInfo.flags = 0;
-    // shaderModuleCreateInfo.codeSize = fragFileSize;
-    // shaderModuleCreateInfo.pCode = (u32*)fragFileBytes;
-
-    // VkShaderModule fragShaderModule = VK_NULL_HANDLE;
-    // vkResult = vkCreateShaderModule(vkDevice, &shaderModuleCreateInfo, nullptr, &fragShaderModule);
-    // if (vkResult != VK_SUCCESS)
-    // {
-    //     OutputDebugString("Failed to create shader module\n");
-    //     return -1;
-    // }
-    
-    // VkPipelineShaderStageCreateInfo vertShaderStageInfo = {};
-    // vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    // vertShaderStageInfo.pNext = nullptr;
-    // vertShaderStageInfo.flags = 0;
-    // vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-    // vertShaderStageInfo.module = vertShaderModule;
-    // vertShaderStageInfo.pName = "vertMain";
-    // vertShaderStageInfo.pSpecializationInfo = nullptr;
-
-    // VkPipelineShaderStageCreateInfo fragShaderStageInfo = {};
-    // fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    // fragShaderStageInfo.pNext = nullptr;
-    // fragShaderStageInfo.flags = 0;
-    // fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-    // fragShaderStageInfo.module = fragShaderModule;
-    // fragShaderStageInfo.pName = "fragMain";
-    // fragShaderStageInfo.pSpecializationInfo = nullptr;
 
     VkPipelineShaderStageCreateInfo vertShaderStageInfo = {};
     vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -785,14 +717,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
     pipelineInputAssemblyStateCreateInfo.flags = 0;
     pipelineInputAssemblyStateCreateInfo.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
     pipelineInputAssemblyStateCreateInfo.primitiveRestartEnable = false;
-
-    // VkViewport viewport;
-    // viewport.x = 0;
-    // viewport.y = 0;
-    // viewport.width = swapChainExtent.width;
-    // viewport.height = swapChainExtent.height;
-    // viewport.minDepth = 0;
-    // viewport.maxDepth = 1;
 
     VkDynamicState dynamicStates[] = {
         VK_DYNAMIC_STATE_VIEWPORT,
