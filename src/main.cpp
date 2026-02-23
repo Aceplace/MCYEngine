@@ -101,9 +101,8 @@ VkImage* swapChainImages = nullptr;
 VkImageView* swapChainImageViews = nullptr;
 VkExtent2D swapChainExtent = {};
 VkPipeline graphicsPipeline = VK_NULL_HANDLE;
-u32 imageIndex = 0;
 
-void RecordCommandBuffer()
+void RecordCommandBuffer(u32 imageIndex)
 {
     VkCommandBufferBeginInfo commandBufferBeginInfo = {};
     commandBufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -1006,27 +1005,57 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
 
     // RecordCommandBuffer();
 
-    VkSemaphore renderFinishedSemaphore = VK_NULL_HANDLE;
-    VkSemaphore presentCompleteSemaphore = VK_NULL_HANDLE;
-    VkFence drawFence = VK_NULL_HANDLE;
+    
+    // VkSemaphoreCreateInfo semaphoreCreateInfo = {};
+    // semaphoreCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+    // semaphoreCreateInfo.pNext = nullptr;
+    // semaphoreCreateInfo.flags = 0;
+    // VkFenceCreateInfo fenceCreateInfo = {};
+    // fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    // fenceCreateInfo.pNext = nullptr;
+    // fenceCreateInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+    
+    // VkSemaphore* renderFinishedSemaphores = new VkSemaphore[swapChainImagesCount];
+    // VkSemaphore* presentCompleteSemaphores = new VkSemaphore[swapChainImagesCount];
+    // VkFence* drawFences = new VkFence[swapChainImagesCount];
+    // for (u32 i = 0; i < swapChainImagesCount; i++)
+    // {
+    //     if (vkCreateSemaphore(vkDevice, &semaphoreCreateInfo, nullptr, &presentCompleteSemaphores[i]) || 
+    //         vkCreateSemaphore(vkDevice, &semaphoreCreateInfo, nullptr, &renderFinishedSemaphores[i]) ||
+    //         vkCreateFence(vkDevice, &fenceCreateInfo, nullptr, &drawFences[i]))
+    //     {
+    //         OutputDebugString("Could not create semaphores and fences.");
+    //         return -1;
+    //     }
+    // }
+    VkSemaphoreCreateInfo semaphoreInfo{};
+    semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+    
+    VkFenceCreateInfo fenceInfo{};
+    fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-    VkSemaphoreCreateInfo semaphoreCreateInfo = {};
-    semaphoreCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-    semaphoreCreateInfo.pNext = nullptr;
-    semaphoreCreateInfo.flags = 0;
-    VkFenceCreateInfo fenceCreateInfo = {};
-    fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-    fenceCreateInfo.pNext = nullptr;
-    fenceCreateInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-
-    if (vkCreateSemaphore(vkDevice, &semaphoreCreateInfo, nullptr, &renderFinishedSemaphore) || 
-        vkCreateSemaphore(vkDevice, &semaphoreCreateInfo, nullptr, &presentCompleteSemaphore) ||
-        vkCreateFence(vkDevice, &fenceCreateInfo, nullptr, &drawFence))
+    VkSemaphore renderFinishedSemaphore;
+    VkFence inFlightFence;
+    
+    if (   
+        vkCreateSemaphore(vkDevice, &semaphoreInfo, nullptr, &renderFinishedSemaphore) != VK_SUCCESS ||
+        vkCreateFence(vkDevice, &fenceInfo, nullptr, &inFlightFence) != VK_SUCCESS) 
     {
-        OutputDebugString("Could not create semaphores & fence.");
+        throw std::runtime_error("failed to create semaphores!");
         return -1;
     }
-
+    
+    VkSemaphore* imageAvailableSemaphores = new VkSemaphore[swapChainImagesCount];
+    for (u32 i = 0; i < swapChainImagesCount; i++)
+    {
+        if (vkCreateSemaphore(vkDevice, &semaphoreInfo, nullptr, &imageAvailableSemaphores[i]))
+        {
+            throw std::runtime_error("failed to create semaphores!");
+            return -1;
+        }
+    }
+        
     MSG msg = { };
     bool running = true;
     while (running)
@@ -1041,35 +1070,39 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
             TranslateMessage(&msg);
             DispatchMessage(&msg);
 
-            VkResult fenceResult = vkWaitForFences(vkDevice, 1, &drawFence, true, UINT64_MAX);
-            vkAcquireNextImageKHR(vkDevice, swapChain, UINT64_MAX, presentCompleteSemaphore, VK_NULL_HANDLE, &imageIndex);
-            RecordCommandBuffer();
-            vkResetFences(vkDevice, 1, &drawFence);
+            vkWaitForFences(vkDevice, 1, &inFlightFence, VK_TRUE, UINT64_MAX);
+            vkResetFences(vkDevice, 1, &inFlightFence);
+            
+            u32 imageIndex;
+            vkAcquireNextImageKHR(vkDevice, swapChain, UINT64_MAX, imageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
+            vkResetCommandBuffer(commandBuffer, 0);
+            RecordCommandBuffer(imageIndex);
 
+            VkSemaphore waitSemaphores[] = {imageAvailableSemaphore};
+            VkSemaphore signalSemaphores[] = {renderFinishedSemaphore};
             VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
             VkSubmitInfo submitInfo = {};
             submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
             submitInfo.pNext = nullptr;
             submitInfo.waitSemaphoreCount = 1;
-            submitInfo.pWaitSemaphores = &presentCompleteSemaphore;
+            submitInfo.pWaitSemaphores = waitSemaphores;
             submitInfo.pWaitDstStageMask = waitStages;
             submitInfo.commandBufferCount = 1;
             submitInfo.pCommandBuffers = &commandBuffer;
             submitInfo.signalSemaphoreCount = 1;
-            submitInfo.pSignalSemaphores = &renderFinishedSemaphore;
-
-            vkQueueSubmit(graphicsQueue, 1, & submitInfo, drawFence);
+            submitInfo.pSignalSemaphores = signalSemaphores;
+            vkQueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFence);
 
             VkPresentInfoKHR presentInfo = {};
             presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
             presentInfo.pNext = nullptr;
             presentInfo.waitSemaphoreCount = 1;
-            presentInfo.pWaitSemaphores = &renderFinishedSemaphore;
+            presentInfo.pWaitSemaphores = signalSemaphores;
+            VkSwapchainKHR swapChains[] = {swapChain};
             presentInfo.swapchainCount = 1;
-            presentInfo.pSwapchains = &swapChain;
+            presentInfo.pSwapchains = swapChains;
             presentInfo.pImageIndices = &imageIndex;
             presentInfo.pResults = nullptr;
-
             vkResult = vkQueuePresentKHR(presentQueue, &presentInfo);
         }
     }   
