@@ -96,6 +96,8 @@ bool ReadEntireFile(const char* fileName, char** bufferOut, st* sizeOut)
     return true;
 }
 
+
+
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL VulkanDebgCallback(
@@ -371,8 +373,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
     vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, NULL);    
     VkQueueFamilyProperties* queueFamilies = new VkQueueFamilyProperties[queueFamilyCount];
     vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, queueFamilies);
-    s32 graphicsIndex = -1;
-    s32 presentIndex = -1;
+    s32 graphicsQueueIndex = -1;
+    s32 presentQueueIndex = -1;
 
     for (s32 i = 0; i < queueFamilyCount; i++)
     {
@@ -380,24 +382,24 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
         VkBool32 presentSupport = VK_FALSE;
         vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, i, surface, &presentSupport);
 
-        if (hasGraphics && graphicsIndex == -1)
-            graphicsIndex = i;
-        if (presentSupport == VK_TRUE && presentIndex == -1)
-            presentIndex = i;
+        if (hasGraphics && graphicsQueueIndex == -1)
+            graphicsQueueIndex = i;
+        if (presentSupport == VK_TRUE && presentQueueIndex == -1)
+            presentQueueIndex = i;
         if (hasGraphics && presentSupport == VK_TRUE)
         {
-            graphicsIndex = i;
-            presentIndex = i;
+            graphicsQueueIndex = i;
+            presentQueueIndex = i;
         }
     }
     delete[] queueFamilies;
 
-    if (graphicsIndex == -1)
+    if (graphicsQueueIndex == -1)
     {
         OutputDebugString("Could not find graphics queue index\n");
         return -1;
     }
-    if (presentIndex == -1)
+    if (presentQueueIndex == -1)
     {
         OutputDebugString("Could not find present queue index\n");
         return -1;
@@ -408,13 +410,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
     graphicsQueueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
     graphicsQueueCreateInfo.pNext = nullptr;
     graphicsQueueCreateInfo.flags = 0;
-    graphicsQueueCreateInfo.queueFamilyIndex = graphicsIndex;
+    graphicsQueueCreateInfo.queueFamilyIndex = graphicsQueueIndex;
     graphicsQueueCreateInfo.queueCount = 1;
     graphicsQueueCreateInfo.pQueuePriorities = &queuePriority;
 
     VkDeviceQueueCreateInfo queueCreateInfos[2];
     uint32_t queueCreateInfoCount = 0;
-    if (graphicsIndex == presentIndex) 
+    if (graphicsQueueIndex == presentQueueIndex) 
     {
         queueCreateInfos[0] = graphicsQueueCreateInfo;
         queueCreateInfoCount = 1;
@@ -426,7 +428,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
         presentQueueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
         presentQueueCreateInfo.pNext = nullptr;
         presentQueueCreateInfo.flags = 0;
-        presentQueueCreateInfo.queueFamilyIndex = presentIndex;
+        presentQueueCreateInfo.queueFamilyIndex = presentQueueIndex;
         presentQueueCreateInfo.queueCount = 1;
         presentQueueCreateInfo.pQueuePriorities = &queuePriority;
         queueCreateInfos[1] = presentQueueCreateInfo;
@@ -466,7 +468,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
     vkPhysicalDeviceVulkan13Features.shaderTerminateInvocation = false;
     vkPhysicalDeviceVulkan13Features.subgroupSizeControl = false;
     vkPhysicalDeviceVulkan13Features.computeFullSubgroups = false;
-    vkPhysicalDeviceVulkan13Features.synchronization2 = false;
+    vkPhysicalDeviceVulkan13Features.synchronization2 = true;
     vkPhysicalDeviceVulkan13Features.textureCompressionASTC_HDR = false;
     vkPhysicalDeviceVulkan13Features.shaderZeroInitializeWorkgroupMemory = false;
     vkPhysicalDeviceVulkan13Features.dynamicRendering = true;
@@ -505,8 +507,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
 
     VkQueue graphicsQueue = nullptr;
     VkQueue presentQueue = nullptr;
-    vkGetDeviceQueue(vkDevice, graphicsIndex, 0, &graphicsQueue);
-    vkGetDeviceQueue(vkDevice, presentIndex, 0, &presentQueue);
+    vkGetDeviceQueue(vkDevice, graphicsQueueIndex, 0, &graphicsQueue);
+    vkGetDeviceQueue(vkDevice, presentQueueIndex, 0, &presentQueue);
 
     if (!graphicsQueue)
     {
@@ -593,8 +595,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
     swapChainCreateInfo.clipped = true;
     swapChainCreateInfo.oldSwapchain = VK_NULL_HANDLE;
 
-    u32 queueFamilyIndices[] = {(u32)graphicsIndex, (u32)presentIndex};
-    if (graphicsIndex != presentIndex) 
+    u32 queueFamilyIndices[] = {(u32)graphicsQueueIndex, (u32)presentQueueIndex};
+    if (graphicsQueueIndex != presentQueueIndex) 
     {
         swapChainCreateInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
         swapChainCreateInfo.queueFamilyIndexCount = 2;
@@ -842,6 +844,162 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
         return -1;
     }
 
+    VkCommandPool commandPool = VK_NULL_HANDLE;
+    VkCommandPoolCreateInfo commandPoolCreateInfo = {};
+    commandPoolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    commandPoolCreateInfo.pNext = nullptr;
+    commandPoolCreateInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+    commandPoolCreateInfo.queueFamilyIndex = graphicsQueueIndex;
+    vkResult = vkCreateCommandPool(vkDevice, &commandPoolCreateInfo, nullptr, &commandPool);
+    if (vkResult != VK_SUCCESS)
+    {
+        OutputDebugString("Could not create command pool");
+        return -1;
+    }
+
+    VkCommandBufferAllocateInfo commandBufferAllocateInfo = {};
+    commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    commandBufferAllocateInfo.pNext = nullptr;
+    commandBufferAllocateInfo.commandPool = commandPool;
+    commandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    commandBufferAllocateInfo.commandBufferCount = 1;
+    
+    VkCommandBuffer commandBuffer;
+    vkResult = vkAllocateCommandBuffers(vkDevice, &commandBufferAllocateInfo, &commandBuffer);
+    if (vkResult != VK_SUCCESS)
+    {
+        OutputDebugString("Failed to allocate command buffer.");
+        return -1;
+    }
+
+    VkCommandBufferBeginInfo commandBufferBeginInfo = {};
+    commandBufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    commandBufferBeginInfo.pNext = nullptr;
+    commandBufferBeginInfo.flags = 0;
+    commandBufferBeginInfo.pInheritanceInfo = nullptr;
+    vkBeginCommandBuffer(commandBuffer, &commandBufferBeginInfo);
+
+    u32 imageIndex = 0;
+    VkImageMemoryBarrier2 barrier = {};
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+    barrier.pNext = nullptr;
+    barrier.srcAccessMask = 0;
+    barrier.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT_KHR;
+    barrier.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    barrier.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.image = swapChainImages[imageIndex];
+    VkImageSubresourceRange imageSubresourceName = {};
+    imageSubresourceName.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    imageSubresourceName.baseMipLevel = 0;
+    imageSubresourceName.levelCount = 1;
+    imageSubresourceName.baseArrayLayer = 0;
+    imageSubresourceName.layerCount = 1;
+    barrier.subresourceRange = imageSubresourceName;
+
+    VkDependencyInfo dependencyInfo = {};
+    dependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+    dependencyInfo.pNext = nullptr;
+    dependencyInfo.dependencyFlags = 0;
+    dependencyInfo.memoryBarrierCount = 0;
+    dependencyInfo.pMemoryBarriers = nullptr;
+    dependencyInfo.bufferMemoryBarrierCount = 0;
+    dependencyInfo.pBufferMemoryBarriers = nullptr;
+    dependencyInfo.imageMemoryBarrierCount = 1;
+    dependencyInfo.pImageMemoryBarriers = &barrier;
+    vkCmdPipelineBarrier2(commandBuffer, &dependencyInfo);
+
+    VkClearValue clearColor = {};
+    clearColor.color.float32[0] = 0.0f;
+    clearColor.color.float32[1] = 0.0f;
+    clearColor.color.float32[2] = 0.0f;
+    clearColor.color.float32[3] = 1.0f;
+    VkRenderingAttachmentInfo attachmentInfo = {};
+    attachmentInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+    attachmentInfo.pNext = nullptr;
+    attachmentInfo.imageView = swapChainImageViews[imageIndex];
+    attachmentInfo.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    attachmentInfo.resolveMode = VK_RESOLVE_MODE_NONE;
+    attachmentInfo.resolveImageView = VK_NULL_HANDLE;
+    attachmentInfo.resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    attachmentInfo.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    attachmentInfo.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    attachmentInfo.clearValue = clearColor;    
+
+    VkRenderingInfo renderingInfo = {};
+    renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+    renderingInfo.pNext = nullptr;
+    renderingInfo.flags = 0;
+    VkRect2D renderArea = {};
+    renderArea.offset.x = 0;
+    renderArea.offset.y = 0;
+    renderArea.extent = swapChainExtent;
+    renderingInfo.renderArea = renderArea;
+    renderingInfo.layerCount = 1;
+    renderingInfo.viewMask = 0;
+    renderingInfo.colorAttachmentCount = 1;
+    renderingInfo.pColorAttachments = &attachmentInfo;
+    renderingInfo.pDepthAttachment = nullptr;
+    renderingInfo.pStencilAttachment = nullptr;
+
+    vkCmdBeginRendering(commandBuffer, &renderingInfo);
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+    
+    VkViewport viewport = {};
+    viewport.x = 0;
+    viewport.y = 0;
+    viewport.width = swapChainExtent.width;
+    viewport.height = swapChainExtent.height;
+    viewport.minDepth = 0;
+    viewport.maxDepth = 1;
+    vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+    
+    VkRect2D scissorRect = {};
+    scissorRect.offset.x = 0;
+    scissorRect.offset.y = 0;
+    scissorRect.extent = swapChainExtent;
+    vkCmdSetScissor(commandBuffer, 0, 1, &scissorRect);
+
+    vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+
+    vkCmdEndRendering(commandBuffer);
+    barrier = {};
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+    barrier.pNext = nullptr;
+    barrier.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT_KHR;
+    barrier.dstAccessMask = 0;
+    barrier.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    barrier.dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
+    barrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.image = swapChainImages[imageIndex];
+    imageSubresourceName = {};
+    imageSubresourceName.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    imageSubresourceName.baseMipLevel = 0;
+    imageSubresourceName.levelCount = 1;
+    imageSubresourceName.baseArrayLayer = 0;
+    imageSubresourceName.layerCount = 1;
+    barrier.subresourceRange = imageSubresourceName;
+
+    dependencyInfo = {};
+    dependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+    dependencyInfo.pNext = nullptr;
+    dependencyInfo.dependencyFlags = 0;
+    dependencyInfo.memoryBarrierCount = 0;
+    dependencyInfo.pMemoryBarriers = nullptr;
+    dependencyInfo.bufferMemoryBarrierCount = 0;
+    dependencyInfo.pBufferMemoryBarriers = nullptr;
+    dependencyInfo.imageMemoryBarrierCount = 1;
+    dependencyInfo.pImageMemoryBarriers = &barrier;
+    vkCmdPipelineBarrier2(commandBuffer, &dependencyInfo);
+    
+    vkEndCommandBuffer(commandBuffer);
+
     MSG msg = { };
     bool running = true;
     while (running)
@@ -859,7 +1017,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
     }   
 
     vkDeviceWaitIdle(vkDevice);
-
+    vkDestroyPipeline(vkDevice, graphicsPipeline, nullptr);
+    vkDestroyPipelineLayout(vkDevice, pipelineLayout, nullptr);
+    vkDestroyCommandPool(vkDevice, commandPool, nullptr);
     vkDestroyShaderModule(vkDevice, shaderModule, nullptr);
     for (u32 i = 0; i < swapChainImagesCount; i++)
     {
