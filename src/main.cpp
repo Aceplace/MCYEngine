@@ -51,7 +51,7 @@ T Min(T value1, T value2)
     return value2;
 }
 
-bool ReadEntireShaderFile(const char* fileName, char** bufferOut, st* sizeOut)
+bool ReadEntireFile(const char* fileName, char** bufferOut, st* sizeOut)
 {
     char errorBuffer[512];
 
@@ -438,6 +438,22 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
     vkPhysicalDeviceFeatures2.pNext = nullptr;
     vkPhysicalDeviceFeatures2.features = {};
 
+    VkPhysicalDeviceVulkan11Features vkPhysicalDeviceVulkan11Features = {};
+    vkPhysicalDeviceVulkan11Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
+    vkPhysicalDeviceVulkan11Features.pNext = nullptr;
+    vkPhysicalDeviceVulkan11Features.storageBuffer16BitAccess = false;
+    vkPhysicalDeviceVulkan11Features.uniformAndStorageBuffer16BitAccess = false;
+    vkPhysicalDeviceVulkan11Features.storagePushConstant16 = false;
+    vkPhysicalDeviceVulkan11Features.storageInputOutput16 = false;
+    vkPhysicalDeviceVulkan11Features.multiview = false;
+    vkPhysicalDeviceVulkan11Features.multiviewGeometryShader = false;
+    vkPhysicalDeviceVulkan11Features.multiviewTessellationShader = false;
+    vkPhysicalDeviceVulkan11Features.variablePointersStorageBuffer = false;
+    vkPhysicalDeviceVulkan11Features.variablePointers = false;
+    vkPhysicalDeviceVulkan11Features.protectedMemory = false;
+    vkPhysicalDeviceVulkan11Features.samplerYcbcrConversion = false;
+    vkPhysicalDeviceVulkan11Features.shaderDrawParameters = true;
+
     VkPhysicalDeviceVulkan13Features vkPhysicalDeviceVulkan13Features = {};
     vkPhysicalDeviceVulkan13Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
     vkPhysicalDeviceVulkan13Features.pNext = nullptr;
@@ -462,7 +478,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
     vkPhysicalDeviceExtendedDynamicStateFeaturesEXT.pNext = nullptr;
     vkPhysicalDeviceExtendedDynamicStateFeaturesEXT.extendedDynamicState = true;
 
-    vkPhysicalDeviceFeatures2.pNext = &vkPhysicalDeviceVulkan13Features;
+    vkPhysicalDeviceFeatures2.pNext = &vkPhysicalDeviceVulkan11Features;
+    vkPhysicalDeviceVulkan11Features.pNext = &vkPhysicalDeviceVulkan13Features;
     vkPhysicalDeviceVulkan13Features.pNext = &vkPhysicalDeviceExtendedDynamicStateFeaturesEXT;
 
     VkDeviceCreateInfo vkDeviceCreateInfo;
@@ -639,24 +656,41 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
          }
     }
 
-    char* fileBytes = nullptr;
-    st fileSize = 0;
-    // auto shaderCode = readFile("slang.spv");
-    // bool result = ReadEntireShaderFile("vert.spv", &fileBytes, &fileSize);
-    bool result = ReadEntireShaderFile("slang.spv", &fileBytes, &fileSize);
-
+    char* shaderFileBytes = nullptr;
+    st shaderFileSize = 0;
+    bool result = ReadEntireFile("slang.spv", &shaderFileBytes, &shaderFileSize);
     if (!result)
     {
         OutputDebugString("Failed to read shader file\n");
         return -1;
     }
+    // char* vertFileBytes = nullptr;
+    // st vertFileSize = 0;
+    // auto shaderCode = readFile("slang.spv");
+    // bool result = ReadEntireShaderFile("vert.spv", &fileBytes, &fileSize);
+    // bool result = ReadEntireFile("vert.spv", &vertFileBytes, &vertFileSize);
+    // if (!result)
+    // {
+    //     OutputDebugString("Failed to read shader file\n");
+    //     return -1;
+    // }
+    // char* fragFileBytes = nullptr;
+    // st fragFileSize = 0;
+    // auto shaderCode = readFile("slang.spv");
+    // bool result = ReadEntireShaderFile("vert.spv", &fileBytes, &fileSize);
+    // result = ReadEntireFile("frag.spv", &fragFileBytes, &fragFileSize);
+    // if (!result)
+    // {
+    //     OutputDebugString("Failed to read shader file\n");
+    //     return -1;
+    // }
 
     VkShaderModuleCreateInfo shaderModuleCreateInfo = {};
     shaderModuleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
     shaderModuleCreateInfo.pNext = nullptr;
     shaderModuleCreateInfo.flags = 0;
-    shaderModuleCreateInfo.codeSize = fileSize;
-    shaderModuleCreateInfo.pCode = (u32*)fileBytes;
+    shaderModuleCreateInfo.codeSize = shaderFileSize;
+    shaderModuleCreateInfo.pCode = (u32*)shaderFileBytes;
 
     VkShaderModule shaderModule = VK_NULL_HANDLE;
     vkResult = vkCreateShaderModule(vkDevice, &shaderModuleCreateInfo, nullptr, &shaderModule);
@@ -665,6 +699,54 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
         OutputDebugString("Failed to create shader module\n");
         return -1;
     }
+
+    // VkShaderModuleCreateInfo shaderModuleCreateInfo = {};
+    // shaderModuleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    // shaderModuleCreateInfo.pNext = nullptr;
+    // shaderModuleCreateInfo.flags = 0;
+    // shaderModuleCreateInfo.codeSize = vertFileSize;
+    // shaderModuleCreateInfo.pCode = (u32*)vertFileBytes;
+
+    // VkShaderModule vertShaderModule = VK_NULL_HANDLE;
+    // vkResult = vkCreateShaderModule(vkDevice, &shaderModuleCreateInfo, nullptr, &vertShaderModule);
+    // if (vkResult != VK_SUCCESS)
+    // {
+    //     OutputDebugString("Failed to create shader module\n");
+    //     return -1;
+    // }
+
+    // shaderModuleCreateInfo = {};
+    // shaderModuleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    // shaderModuleCreateInfo.pNext = nullptr;
+    // shaderModuleCreateInfo.flags = 0;
+    // shaderModuleCreateInfo.codeSize = fragFileSize;
+    // shaderModuleCreateInfo.pCode = (u32*)fragFileBytes;
+
+    // VkShaderModule fragShaderModule = VK_NULL_HANDLE;
+    // vkResult = vkCreateShaderModule(vkDevice, &shaderModuleCreateInfo, nullptr, &fragShaderModule);
+    // if (vkResult != VK_SUCCESS)
+    // {
+    //     OutputDebugString("Failed to create shader module\n");
+    //     return -1;
+    // }
+    
+    // VkPipelineShaderStageCreateInfo vertShaderStageInfo = {};
+    // vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    // vertShaderStageInfo.pNext = nullptr;
+    // vertShaderStageInfo.flags = 0;
+    // vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+    // vertShaderStageInfo.module = vertShaderModule;
+    // vertShaderStageInfo.pName = "vertMain";
+    // vertShaderStageInfo.pSpecializationInfo = nullptr;
+
+    // VkPipelineShaderStageCreateInfo fragShaderStageInfo = {};
+    // fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    // fragShaderStageInfo.pNext = nullptr;
+    // fragShaderStageInfo.flags = 0;
+    // fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    // fragShaderStageInfo.module = fragShaderModule;
+    // fragShaderStageInfo.pName = "fragMain";
+    // fragShaderStageInfo.pSpecializationInfo = nullptr;
 
     VkPipelineShaderStageCreateInfo vertShaderStageInfo = {};
     vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -865,7 +947,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
     delete[] swapChainImageViews;
     vkDestroySwapchainKHR(vkDevice, swapChain, nullptr);
     delete[] swapChainImages;
-    delete[] fileBytes;
+    delete[] shaderFileBytes;
     vkDestroyDevice(vkDevice, NULL);
     vkDestroySurfaceKHR(vkInstance, surface, NULL);
     pfnDestroyDebugUtilsMessengerEXT(vkInstance, vKDebugUtilsMessengerExt, NULL);

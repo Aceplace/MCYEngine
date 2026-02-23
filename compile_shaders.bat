@@ -1,30 +1,60 @@
 @echo off
 setlocal
 
-slangc src\shader.slang ^
-    -target spirv ^
-    -profile spirv_1_3 ^
-    -emit-spirv-via-glsl ^
-    -fvk-use-entrypoint-name ^
-    -entry vertMain ^
-    -entry fragMain ^
-    -o slang.spv
+slangc.exe src/shader.slang -target spirv -profile spirv_1_4 -emit-spirv-directly -fvk-use-entrypoint-name -entry vertMain -entry fragMain -o slang.spv
 
-glslc.exe shader.vert -o vert.spv
+@REM slangc src\shader.slang ^
+@REM     -target spirv ^
+@REM     -profile spirv_1_3 ^
+@REM     -emit-spirv-via-glsl ^
+@REM     -fvk-use-entrypoint-name ^
+@REM     -entry vertMain ^
+@REM     -entry fragMain ^
+@REM     -o slang.spv
 
-if errorlevel 1 (
-    echo.
-    echo Shader compilation FAILED.
-    exit /b 1
-)
+@REM slangc src\shader.slang ^
+@REM     -target spirv ^
+@REM     -profile spirv_1_3 ^
+@REM     -emit-spirv-via-glsl ^
+@REM     -fvk-use-entrypoint-name ^
+@REM     -entry vertMain ^
+@REM     -o vert.spv
 
-glslc.exe shader.frag -o frag.spv
+@REM if errorlevel 1 (
+@REM     echo.
+@REM     echo Shader compilation FAILED.
+@REM     exit /b 1
+@REM )
 
-if errorlevel 1 (
-    echo.
-    echo Shader compilation FAILED.
-    exit /b 1
-)
+@REM slangc src\shader.slang ^
+@REM     -target spirv ^
+@REM     -profile spirv_1_3 ^
+@REM     -emit-spirv-via-glsl ^
+@REM     -fvk-use-entrypoint-name ^
+@REM     -entry fragMain ^
+@REM     -o frag.spv
+
+@REM if errorlevel 1 (
+@REM     echo.
+@REM     echo Shader compilation FAILED.
+@REM     exit /b 1
+@REM )
+
+@REM glslc.exe shader.vert -o vert.spv
+
+@REM if errorlevel 1 (
+@REM     echo.
+@REM     echo Shader compilation FAILED.
+@REM     exit /b 1
+@REM )
+
+@REM glslc.exe shader.frag -o frag.spv
+
+@REM if errorlevel 1 (
+@REM     echo.
+@REM     echo Shader compilation FAILED.
+@REM     exit /b 1
+@REM )
 
 echo.
 echo Shader compilation succeeded
