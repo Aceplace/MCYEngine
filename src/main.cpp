@@ -1,16 +1,3 @@
-#define WIN32_LEAN_AND_MEAN
-#include <iostream>
-#include <vector>
-#include <string>
-#include <fstream>
-
-#include <windows.h>
-#define VK_USE_PLATFORM_WIN32_KHR
-#include <vulkan/vulkan.h>
-
-#include <glm/vec4.hpp>
-#include <glm/mat4x4.hpp>
-#include <cmath>
 #include "mcy_helpers.h"
 #include "vulkan_layer.cpp"
 
@@ -106,6 +93,8 @@ void RecordCommandBuffer(VkCommandBuffer commandBuffer, u32 imageIndex)
     scissorRect.extent = swapChainExtent;
     vkCmdSetScissor(commandBuffer, 0, 1, &scissorRect);
 
+    VkDeviceSize offset = 0;
+    vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer, &offset);
     vkCmdDraw(commandBuffer, 3, 1, 0, 0);
 
     vkCmdEndRendering(commandBuffer);

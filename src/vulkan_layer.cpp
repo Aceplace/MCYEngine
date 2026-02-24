@@ -3,6 +3,50 @@
 #define VK_USE_PLATFORM_WIN32_KHR
 #include <vulkan/vulkan.h>
 #include "mcy_helpers.h"
+#include <glm/glm.hpp>
+
+struct Vertex
+{
+    glm::vec2 pos;
+    glm::vec3 color;
+
+};
+
+const Vertex vertices[] = {
+    {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+    {{0.5f, 0.5f}, {1.0f, 0.0f, 0.0f}},
+    {{-0.5f, 0.5f}, {1.0f, 0.0f, 0.0f}}
+};
+VkBuffer vertexBuffer = VK_NULL_HANDLE;
+VkDeviceMemory vertexBufferMemory = VK_NULL_HANDLE;
+
+VkVertexInputBindingDescription VertexGetBindingDescription()
+{
+    VkVertexInputBindingDescription result = {};
+    result.binding = 0;
+    result.stride = sizeof(Vertex);
+    result.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+    return result;
+}
+
+VkVertexInputAttributeDescription* VertexGetInputAttributeDescription()
+{
+    VkVertexInputAttributeDescription* result = new VkVertexInputAttributeDescription[2];
+
+    result[0] = {};
+    result[0].location = 0;
+    result[0].binding = 0;
+    result[0].format = VK_FORMAT_R32G32_SFLOAT;
+    result[0].offset = offsetof(Vertex, pos);
+    
+    result[1] = {};
+    result[1].location = 1;
+    result[1].binding = 0;
+    result[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+    result[1].offset = offsetof(Vertex, color);
+
+    return result;
+}
 
 const u32 MAX_FRAMES_IN_FLIGHT = 2;
 HWND _hwnd = NULL;
@@ -37,6 +81,7 @@ VkInstance vkInstance = VK_NULL_HANDLE;
 char* shaderFileBytes = nullptr;
 VkDebugUtilsMessengerEXT vKDebugUtilsMessengerExt = VK_NULL_HANDLE;
 PFN_vkDestroyDebugUtilsMessengerEXT pfnDestroyDebugUtilsMessengerEXT = nullptr;
+
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL VulkanDebgCallback(
     VkDebugUtilsMessageSeverityFlagBitsEXT   messageSeverity,
@@ -643,14 +688,17 @@ bool VulkanInitialize()
         vertShaderStageInfo, fragShaderStageInfo
     };
 
+    VkVertexInputBindingDescription bindingDescription = VertexGetBindingDescription();
+    VkVertexInputAttributeDescription* attributeDescriptions = VertexGetInputAttributeDescription();
+
     VkPipelineVertexInputStateCreateInfo pipelineVertexInputStateCreateInfo = {};
     pipelineVertexInputStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
     pipelineVertexInputStateCreateInfo.pNext = nullptr;
     pipelineVertexInputStateCreateInfo.flags = 0;
-    pipelineVertexInputStateCreateInfo.vertexBindingDescriptionCount = 0;
-    pipelineVertexInputStateCreateInfo.pVertexBindingDescriptions = nullptr;
-    pipelineVertexInputStateCreateInfo.vertexAttributeDescriptionCount = 0;
-    pipelineVertexInputStateCreateInfo.pVertexAttributeDescriptions = nullptr;
+    pipelineVertexInputStateCreateInfo.vertexBindingDescriptionCount = 1;
+    pipelineVertexInputStateCreateInfo.pVertexBindingDescriptions = &bindingDescription;
+    pipelineVertexInputStateCreateInfo.vertexAttributeDescriptionCount = 2;
+    pipelineVertexInputStateCreateInfo.pVertexAttributeDescriptions = attributeDescriptions;
 
     VkPipelineInputAssemblyStateCreateInfo pipelineInputAssemblyStateCreateInfo = {};
     pipelineInputAssemblyStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -792,6 +840,73 @@ bool VulkanInitialize()
         OutputDebugString("Could not create command pool");
         return false;
     }
+
+    ////////////////////////
+    VkBufferCreateInfo vertexBufferCreateInfo = {};
+    vertexBufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    vertexBufferCreateInfo.pNext = nullptr;
+    vertexBufferCreateInfo.flags = 0;
+    vertexBufferCreateInfo.size = sizeof(vertices);
+    vertexBufferCreateInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+    vertexBufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    vertexBufferCreateInfo.queueFamilyIndexCount = 0;
+    vertexBufferCreateInfo.pQueueFamilyIndices = nullptr;
+    vkResult = vkCreateBuffer(vkDevice, &vertexBufferCreateInfo, nullptr, &vertexBuffer);
+    if (vkResult != VK_SUCCESS)
+    {
+        OutputDebugString("Could not create a vertex buffer");
+        return false;
+    }
+
+    VkMemoryRequirements memRequirements = {};
+    vkGetBufferMemoryRequirements(vkDevice, vertexBuffer, &memRequirements);
+
+    VkPhysicalDeviceMemoryProperties memProperties = {}; 
+    vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
+
+    u32 typeFilter = memRequirements.memoryTypeBits;
+    VkMemoryPropertyFlags memoryPropertyFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+    s32 memoryTypeIndex = -1;
+
+    for (u32 i = 0; i < memProperties.memoryTypeCount; i++) 
+    {
+        if ((typeFilter & (1 << i))  && (memProperties.memoryTypes[i].propertyFlags & memoryPropertyFlags) == memoryPropertyFlags) 
+        {
+            memoryTypeIndex = i;
+            break;
+        }
+    }
+
+    if (memoryTypeIndex == -1)
+    {
+        OutputDebugString("Could not find suitable memory type in physical device");
+        return false;
+    }
+
+    VkMemoryAllocateInfo memoryAllocateInfo = {};
+    memoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    memoryAllocateInfo.pNext = nullptr;
+    memoryAllocateInfo.allocationSize = memRequirements.size;
+    memoryAllocateInfo.memoryTypeIndex = memoryTypeIndex;
+    vkResult = vkAllocateMemory(vkDevice, &memoryAllocateInfo, nullptr, &vertexBufferMemory);
+    
+    if (vkResult != VK_SUCCESS)
+    {
+        OutputDebugString("Could not allocate vertex buffer memory.");
+        return false;
+    }
+
+    vkBindBufferMemory(vkDevice, vertexBuffer, vertexBufferMemory, 0);
+
+    void* data = nullptr;
+    vkResult = vkMapMemory(vkDevice, vertexBufferMemory, 0, vertexBufferCreateInfo.size, 0, &data);
+    if (vkResult != VK_SUCCESS)
+    {
+        OutputDebugString("Could not map vertex buffer memory.");
+        return false;
+    }
+    memcpy(data, vertices, vertexBufferCreateInfo.size);
+    vkUnmapMemory(vkDevice, vertexBufferMemory);
 
     VkCommandBufferAllocateInfo commandBufferAllocateInfo = {};
     commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
