@@ -12,13 +12,15 @@ struct Vertex
 
 };
 
-const Vertex _vertices[] = {
+const Vertex __vertices[] = {
     {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
     {{0.5f, 0.5f}, {1.0f, 0.0f, 0.0f}},
     {{-0.5f, 0.5f}, {1.0f, 0.0f, 0.0f}}
 };
-VkBuffer _vertexBuffer = VK_NULL_HANDLE;
-VkDeviceMemory _vertexBufferMemory = VK_NULL_HANDLE;
+VkBuffer __vertexBuffer = VK_NULL_HANDLE;
+VkDeviceMemory __vertexBufferMemory = VK_NULL_HANDLE;
+
+
 
 VkVertexInputBindingDescription VertexGetBindingDescription()
 {
@@ -63,6 +65,7 @@ VkSurfaceFormatKHR surfaceFormat = {};
 VkExtent2D extent = {};
 VkSurfaceCapabilitiesKHR surfaceCapabilities{}; 
 VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR;
+VkBuffer vertexBuffer = VK_NULL_HANDLE;
 s32 graphicsQueueIndex = -1;
 s32 presentQueueIndex = -1;
 VkFormat swapChainImageFormat = VK_FORMAT_UNDEFINED;
@@ -94,6 +97,60 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL VulkanDebgCallback(
     OutputDebugString(messageBuffer);
     
     return VK_FALSE;
+}
+
+void VulkanCopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size)
+{
+    VkCommandBufferAllocateInfo commandBufferAllocateInfo = {};
+    commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    commandBufferAllocateInfo.pNext = nullptr;
+    commandBufferAllocateInfo.commandPool = commandPool;
+    commandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    commandBufferAllocateInfo.commandBufferCount = 1;
+
+    VkCommandBuffer commandCopyBuffer;
+    VkResult result = vkAllocateCommandBuffers(vkDevice, &commandBufferAllocateInfo, &commandCopyBuffer);
+    if (result != VK_SUCCESS) 
+    {
+        OutputDebugString("Could not allocate temp command buffer");
+        return;
+    }
+
+    VkCommandBufferBeginInfo beginInfo = {};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT; 
+    beginInfo.pInheritanceInfo = nullptr; 
+
+    result = vkBeginCommandBuffer(commandCopyBuffer, &beginInfo);
+    if (result != VK_SUCCESS)
+    {
+        OutputDebugString("Could not begin command buffer");
+        return;
+    }
+
+    VkBufferCopy copyRegion = {};
+    copyRegion.srcOffset = 0;
+    copyRegion.dstOffset = 0;
+    copyRegion.size = size;
+
+     vkCmdCopyBuffer(commandCopyBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
+
+    result = vkEndCommandBuffer(commandCopyBuffer);
+    if (result != VK_SUCCESS)
+    {
+        OutputDebugString("Could not end command buffer");
+        return;
+    }
+
+    VkSubmitInfo submitInfo = {};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &commandCopyBuffer;
+
+    vkQueueSubmit(graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
+    vkQueueWaitIdle(graphicsQueue);
+
+    vkFreeCommandBuffers(vkDevice, commandPool, 1, &commandCopyBuffer);
 }
 
 s32 VulkanFindMemoryTypeIndex(uint32_t typeFilter, VkMemoryPropertyFlags memoryPropertyFlags)
@@ -523,6 +580,7 @@ bool VulkanInitialize()
         {
             graphicsQueueIndex = i;
             presentQueueIndex = i;
+            break;
         }
     }
     delete[] queueFamilies;
@@ -921,23 +979,109 @@ bool VulkanInitialize()
 
     // vkBindBufferMemory(vkDevice, vertexBuffer, vertexBufferMemory, 0);
 
-    u32 vertexBufferSize = sizeof(_vertices);
-    VulkanCreateBuffer(
-        vertexBufferSize, 
-        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, 
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        &_vertexBuffer, &_vertexBufferMemory
-    );
-    void* data = nullptr;
-    vkResult = vkMapMemory(vkDevice, _vertexBufferMemory, 0, vertexBufferSize, 0, &data);
+    // u32 vertexBufferSize = sizeof(_vertices);
+    // VulkanCreateBuffer(
+    //     vertexBufferSize, 
+    //     VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, 
+    //     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+    //     &_vertexBuffer, &_vertexBufferMemory
+    // );
+    // void* data = nullptr;
+    // vkResult = vkMapMemory(vkDevice, _vertexBufferMemory, 0, vertexBufferSize, 0, &data);
+    // if (vkResult != VK_SUCCESS)
+    // {
+    //     OutputDebugString("Could not map vertex buffer memory.");
+    //     return false;
+    // }
+    // memcpy(data, _vertices, vertexBufferSize);
+    // vkUnmapMemory(vkDevice, _vertexBufferMemory);
+
+    VkDeviceSize vertexBufferSize = sizeof(__vertices);
+
+    VkBufferCreateInfo stagingCreateInfo = {};
+    stagingCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    stagingCreateInfo.pNext = nullptr;
+    stagingCreateInfo.flags = 0;
+    stagingCreateInfo.size = vertexBufferSize;
+    stagingCreateInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT; 
+    stagingCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    stagingCreateInfo.queueFamilyIndexCount = 0;
+    stagingCreateInfo.pQueueFamilyIndices = nullptr;
+
+    VkBuffer stagingBuffer = VK_NULL_HANDLE;
+    vkResult = vkCreateBuffer(vkDevice, &stagingCreateInfo, nullptr, &stagingBuffer);
     if (vkResult != VK_SUCCESS)
     {
-        OutputDebugString("Could not map vertex buffer memory.");
+        OutputDebugString("Could not create staging buffer");
         return false;
     }
-    memcpy(data, _vertices, vertexBufferSize);
-    vkUnmapMemory(vkDevice, _vertexBufferMemory);
 
+    VkMemoryRequirements stagingBufferMemRequirements = {};
+    vkGetBufferMemoryRequirements(vkDevice, stagingBuffer, &stagingBufferMemRequirements);
+
+    VkMemoryAllocateInfo stagingMemoryAllocateInfo = {};
+    stagingMemoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    stagingMemoryAllocateInfo.pNext = nullptr;
+    stagingMemoryAllocateInfo.allocationSize = stagingBufferMemRequirements.size;
+    stagingMemoryAllocateInfo.memoryTypeIndex = VulkanFindMemoryTypeIndex(stagingBufferMemRequirements.memoryTypeBits, 
+                                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    VkDeviceMemory stagingBufferMemory = VK_NULL_HANDLE;
+    vkResult = vkAllocateMemory(vkDevice, &stagingMemoryAllocateInfo, nullptr, &stagingBufferMemory);
+    if (vkResult != VK_SUCCESS)
+    {
+        OutputDebugString("Could not allocate memory for staging buffer");
+        return false;
+    }
+
+    vkBindBufferMemory(vkDevice, stagingBuffer, stagingBufferMemory, 0);
+    void* data = nullptr;
+    vkResult = vkMapMemory(vkDevice, stagingBufferMemory, 0, vertexBufferSize, 0, &data);
+    if (vkResult != VK_SUCCESS)
+    {
+        OutputDebugString("Could not map staging memory.");
+        return false;
+    }
+    memcpy(data, __vertices, vertexBufferSize);
+    vkUnmapMemory(vkDevice, stagingBufferMemory);
+
+    VkBufferCreateInfo vertexBufferCreateInfo = {};
+    vertexBufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    vertexBufferCreateInfo.pNext = nullptr;
+    vertexBufferCreateInfo.flags = 0;
+    vertexBufferCreateInfo.size = vertexBufferSize;
+    vertexBufferCreateInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    vertexBufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    vertexBufferCreateInfo.queueFamilyIndexCount = 0;
+    vertexBufferCreateInfo.pQueueFamilyIndices = nullptr;
+
+    vkResult = vkCreateBuffer(vkDevice, &vertexBufferCreateInfo, nullptr, &vertexBuffer);
+    if (vkResult != VK_SUCCESS)
+    {
+        OutputDebugString("Could not create vertex buffer");
+        return false;
+    }
+
+    VkMemoryRequirements vertexBufferMemRequirements = {};
+    vkGetBufferMemoryRequirements(vkDevice, vertexBuffer, &vertexBufferMemRequirements);
+    
+    VkMemoryAllocateInfo vertexBufferMemoryAllocateInfo = {};
+    vertexBufferMemoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    vertexBufferMemoryAllocateInfo.pNext = nullptr;
+    vertexBufferMemoryAllocateInfo.allocationSize = vertexBufferMemRequirements.size;
+    vertexBufferMemoryAllocateInfo.memoryTypeIndex = VulkanFindMemoryTypeIndex(vertexBufferMemRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    VkDeviceMemory vertexBufferMemory = VK_NULL_HANDLE;
+    vkResult = vkAllocateMemory(vkDevice, &vertexBufferMemoryAllocateInfo, nullptr, &vertexBufferMemory);
+    if (vkResult != VK_SUCCESS)
+    {
+        OutputDebugString("Could not allocate memory for vertex buffer");
+        return false;
+    }
+
+    vkBindBufferMemory(vkDevice, vertexBuffer, vertexBufferMemory, 0);
+    VulkanCopyBuffer(stagingBuffer, vertexBuffer, vertexBufferSize);
+
+    /////////////////
+    
     VkCommandBufferAllocateInfo commandBufferAllocateInfo = {};
     commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     commandBufferAllocateInfo.pNext = nullptr;
@@ -984,7 +1128,9 @@ bool VulkanInitialize()
 
 void VulkanCleanUp()
 {
-    vkDeviceWaitIdle(vkDevice);
+    if (vkDevice != VK_NULL_HANDLE)
+        vkDeviceWaitIdle(vkDevice);
+        
     for (u32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
     {
         if (acquireSemaphores[i] != VK_NULL_HANDLE)
