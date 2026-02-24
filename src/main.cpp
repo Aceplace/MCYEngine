@@ -96,13 +96,14 @@ bool ReadEntireFile(const char* fileName, char** bufferOut, st* sizeOut)
     return true;
 }
 
-VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+const u32 MAX_FRAMES_IN_FLIGHT = 2;
+VkCommandBuffer commandBuffers[MAX_FRAMES_IN_FLIGHT] = {};
 VkImage* swapChainImages = nullptr;
 VkImageView* swapChainImageViews = nullptr;
 VkExtent2D swapChainExtent = {};
 VkPipeline graphicsPipeline = VK_NULL_HANDLE;
 
-void RecordCommandBuffer(u32 imageIndex)
+void RecordCommandBuffer(VkCommandBuffer commandBuffer, u32 imageIndex)
 {
     VkCommandBufferBeginInfo commandBufferBeginInfo = {};
     commandBufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -994,9 +995,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
     commandBufferAllocateInfo.pNext = nullptr;
     commandBufferAllocateInfo.commandPool = commandPool;
     commandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    commandBufferAllocateInfo.commandBufferCount = 1;
+    commandBufferAllocateInfo.commandBufferCount = MAX_FRAMES_IN_FLIGHT;
     
-    vkResult = vkAllocateCommandBuffers(vkDevice, &commandBufferAllocateInfo, &commandBuffer);
+    vkResult = vkAllocateCommandBuffers(vkDevice, &commandBufferAllocateInfo, commandBuffers);
     if (vkResult != VK_SUCCESS)
     {
         OutputDebugString("Failed to allocate command buffer.");
@@ -1005,7 +1006,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
 
     // RecordCommandBuffer();
 
-    
     // VkSemaphoreCreateInfo semaphoreCreateInfo = {};
     // semaphoreCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
     // semaphoreCreateInfo.pNext = nullptr;
@@ -1035,26 +1035,31 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
     fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
     fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-    VkSemaphore renderFinishedSemaphore;
-    VkFence inFlightFence;
+    VkSemaphore acquireSemaphores[MAX_FRAMES_IN_FLIGHT];
+    VkFence frameFences[MAX_FRAMES_IN_FLIGHT];
     
-    if (   
-        vkCreateSemaphore(vkDevice, &semaphoreInfo, nullptr, &renderFinishedSemaphore) != VK_SUCCESS ||
-        vkCreateFence(vkDevice, &fenceInfo, nullptr, &inFlightFence) != VK_SUCCESS) 
+    for (u32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
     {
-        throw std::runtime_error("failed to create semaphores!");
-        return -1;
-    }
-    
-    VkSemaphore* imageAvailableSemaphores = new VkSemaphore[swapChainImagesCount];
-    for (u32 i = 0; i < swapChainImagesCount; i++)
-    {
-        if (vkCreateSemaphore(vkDevice, &semaphoreInfo, nullptr, &imageAvailableSemaphores[i]))
+        if (   
+            vkCreateSemaphore(vkDevice, &semaphoreInfo, nullptr, &acquireSemaphores[i]) != VK_SUCCESS ||
+            vkCreateFence(vkDevice, &fenceInfo, nullptr, &frameFences[i]) != VK_SUCCESS) 
         {
-            throw std::runtime_error("failed to create semaphores!");
+            OutputDebugString("failed to create semaphores!");
             return -1;
         }
     }
+    
+    VkSemaphore* submitSemaphores = new VkSemaphore[swapChainImagesCount];
+    for (u32 i = 0; i < swapChainImagesCount; i++)
+    {
+        if (vkCreateSemaphore(vkDevice, &semaphoreInfo, nullptr, &submitSemaphores[i]))
+        {
+            OutputDebugString("failed to create semaphores!");
+            return -1;
+        }
+    }
+
+    u32 currentFrameInFlightIndex = 0;
         
     MSG msg = { };
     bool running = true;
@@ -1070,44 +1075,56 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
             TranslateMessage(&msg);
             DispatchMessage(&msg);
 
-            vkWaitForFences(vkDevice, 1, &inFlightFence, VK_TRUE, UINT64_MAX);
-            vkResetFences(vkDevice, 1, &inFlightFence);
+            vkWaitForFences(vkDevice, 1, &frameFences[currentFrameInFlightIndex], VK_TRUE, UINT64_MAX);
+            vkResetFences(vkDevice, 1, &frameFences[currentFrameInFlightIndex]);
             
             u32 imageIndex;
-            vkAcquireNextImageKHR(vkDevice, swapChain, UINT64_MAX, imageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
-            vkResetCommandBuffer(commandBuffer, 0);
-            RecordCommandBuffer(imageIndex);
+            vkAcquireNextImageKHR(vkDevice, swapChain, UINT64_MAX, acquireSemaphores[currentFrameInFlightIndex], VK_NULL_HANDLE, &imageIndex);
+            vkResetCommandBuffer(commandBuffers[currentFrameInFlightIndex], 0);
+            RecordCommandBuffer(commandBuffers[currentFrameInFlightIndex], imageIndex);
 
-            VkSemaphore waitSemaphores[] = {imageAvailableSemaphore};
-            VkSemaphore signalSemaphores[] = {renderFinishedSemaphore};
+            VkSemaphore submitSemaphore = submitSemaphores[imageIndex];
+
             VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
             VkSubmitInfo submitInfo = {};
             submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
             submitInfo.pNext = nullptr;
             submitInfo.waitSemaphoreCount = 1;
-            submitInfo.pWaitSemaphores = waitSemaphores;
+            submitInfo.pWaitSemaphores = &acquireSemaphores[currentFrameInFlightIndex];
             submitInfo.pWaitDstStageMask = waitStages;
             submitInfo.commandBufferCount = 1;
-            submitInfo.pCommandBuffers = &commandBuffer;
+            submitInfo.pCommandBuffers = &commandBuffers[currentFrameInFlightIndex];
             submitInfo.signalSemaphoreCount = 1;
-            submitInfo.pSignalSemaphores = signalSemaphores;
-            vkQueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFence);
+            submitInfo.pSignalSemaphores = &submitSemaphore;
+            vkQueueSubmit(graphicsQueue, 1, &submitInfo, frameFences[currentFrameInFlightIndex]);
 
             VkPresentInfoKHR presentInfo = {};
             presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
             presentInfo.pNext = nullptr;
             presentInfo.waitSemaphoreCount = 1;
-            presentInfo.pWaitSemaphores = signalSemaphores;
+            presentInfo.pWaitSemaphores = &submitSemaphore;
             VkSwapchainKHR swapChains[] = {swapChain};
             presentInfo.swapchainCount = 1;
             presentInfo.pSwapchains = swapChains;
             presentInfo.pImageIndices = &imageIndex;
             presentInfo.pResults = nullptr;
             vkResult = vkQueuePresentKHR(presentQueue, &presentInfo);
+
+            currentFrameInFlightIndex = (currentFrameInFlightIndex + 1) % MAX_FRAMES_IN_FLIGHT;
         }
     }   
 
     vkDeviceWaitIdle(vkDevice);
+
+    for (u32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+    {
+        vkDestroySemaphore(vkDevice, acquireSemaphores[i], nullptr);
+        vkDestroyFence(vkDevice, frameFences[i], nullptr);
+    }
+
+    for (u32 i = 0; i < swapChainImagesCount; i++)
+        vkDestroySemaphore(vkDevice, submitSemaphores[i], nullptr);
+
     vkDestroyPipeline(vkDevice, graphicsPipeline, nullptr);
     vkDestroyPipelineLayout(vkDevice, pipelineLayout, nullptr);
     vkDestroyCommandPool(vkDevice, commandPool, nullptr);
