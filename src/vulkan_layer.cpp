@@ -12,13 +12,13 @@ struct Vertex
 
 };
 
-const Vertex vertices[] = {
+const Vertex _vertices[] = {
     {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
     {{0.5f, 0.5f}, {1.0f, 0.0f, 0.0f}},
     {{-0.5f, 0.5f}, {1.0f, 0.0f, 0.0f}}
 };
-VkBuffer vertexBuffer = VK_NULL_HANDLE;
-VkDeviceMemory vertexBufferMemory = VK_NULL_HANDLE;
+VkBuffer _vertexBuffer = VK_NULL_HANDLE;
+VkDeviceMemory _vertexBufferMemory = VK_NULL_HANDLE;
 
 VkVertexInputBindingDescription VertexGetBindingDescription()
 {
@@ -81,7 +81,7 @@ VkInstance vkInstance = VK_NULL_HANDLE;
 char* shaderFileBytes = nullptr;
 VkDebugUtilsMessengerEXT vKDebugUtilsMessengerExt = VK_NULL_HANDLE;
 PFN_vkDestroyDebugUtilsMessengerEXT pfnDestroyDebugUtilsMessengerEXT = nullptr;
-
+VkPhysicalDevice physicalDevice = nullptr;
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL VulkanDebgCallback(
     VkDebugUtilsMessageSeverityFlagBitsEXT   messageSeverity,
@@ -94,6 +94,70 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL VulkanDebgCallback(
     OutputDebugString(messageBuffer);
     
     return VK_FALSE;
+}
+
+s32 VulkanFindMemoryTypeIndex(uint32_t typeFilter, VkMemoryPropertyFlags memoryPropertyFlags)
+{
+    VkPhysicalDeviceMemoryProperties memProperties = {}; 
+    vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
+
+    // u32 typeFilter = memRequirements.memoryTypeBits;
+    // VkMemoryPropertyFlags memoryPropertyFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+    s32 memoryTypeIndex = -1;
+
+    for (u32 i = 0; i < memProperties.memoryTypeCount; i++) 
+    {
+        if ((typeFilter & (1 << i))  && (memProperties.memoryTypes[i].propertyFlags & memoryPropertyFlags) == memoryPropertyFlags) 
+        {
+            memoryTypeIndex = i;
+            break;
+        }
+    }
+
+    return memoryTypeIndex;
+}
+
+bool VulkanCreateBuffer(VkDeviceSize size, VkBufferUsageFlags usageFlags, VkMemoryPropertyFlags memoryPropertyFlags, VkBuffer* buffer, VkDeviceMemory* bufferMemory)
+{
+    VkBufferCreateInfo bufferInfo = {};
+    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferInfo.pNext = nullptr;
+    bufferInfo.flags = 0;
+    bufferInfo.size = size;
+    bufferInfo.usage = usageFlags;
+    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    bufferInfo.queueFamilyIndexCount = 0;
+    bufferInfo.pQueueFamilyIndices = nullptr;
+    VkResult vkResult = vkCreateBuffer(vkDevice, &bufferInfo, nullptr, buffer);
+    if (vkResult != VK_SUCCESS)
+    {
+        OutputDebugString("Could not create buffer");
+        return false;
+    }
+
+    VkMemoryRequirements memRequirements = {};
+    vkGetBufferMemoryRequirements(vkDevice, *buffer, &memRequirements);
+
+    VkMemoryAllocateInfo memoryAllocateInfo = {};
+    memoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    memoryAllocateInfo.pNext = nullptr;
+    memoryAllocateInfo.allocationSize = memRequirements.size;
+    memoryAllocateInfo.memoryTypeIndex = VulkanFindMemoryTypeIndex(memRequirements.memoryTypeBits, memoryPropertyFlags);
+    if (memoryAllocateInfo.memoryTypeIndex == -1)
+    {
+        OutputDebugString("Could not find suitable memory type in physical device");
+        return false;
+    }
+    vkResult = vkAllocateMemory(vkDevice, &memoryAllocateInfo, nullptr, bufferMemory);
+
+    if (vkResult != VK_SUCCESS)
+    {
+        OutputDebugString("Could not allocate memory");
+        return false;
+    }
+
+    vkBindBufferMemory(vkDevice, *buffer, *bufferMemory, 0);
+    return true;
 }
 
 bool RecreateSwapChain()
@@ -364,7 +428,6 @@ bool VulkanInitialize()
         VK_KHR_SWAPCHAIN_EXTENSION_NAME
     };
 
-    VkPhysicalDevice physicalDevice = nullptr;
     for (u32 i = 0; i < vkPhysicalDeviceCount; i++)
     {
         VkPhysicalDevice vkPhysicalDevice = vkPhysicalDevices[i];
@@ -842,71 +905,38 @@ bool VulkanInitialize()
     }
 
     ////////////////////////
-    VkBufferCreateInfo vertexBufferCreateInfo = {};
-    vertexBufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    vertexBufferCreateInfo.pNext = nullptr;
-    vertexBufferCreateInfo.flags = 0;
-    vertexBufferCreateInfo.size = sizeof(vertices);
-    vertexBufferCreateInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-    vertexBufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    vertexBufferCreateInfo.queueFamilyIndexCount = 0;
-    vertexBufferCreateInfo.pQueueFamilyIndices = nullptr;
-    vkResult = vkCreateBuffer(vkDevice, &vertexBufferCreateInfo, nullptr, &vertexBuffer);
-    if (vkResult != VK_SUCCESS)
-    {
-        OutputDebugString("Could not create a vertex buffer");
-        return false;
-    }
-
-    VkMemoryRequirements memRequirements = {};
-    vkGetBufferMemoryRequirements(vkDevice, vertexBuffer, &memRequirements);
-
-    VkPhysicalDeviceMemoryProperties memProperties = {}; 
-    vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
-
-    u32 typeFilter = memRequirements.memoryTypeBits;
-    VkMemoryPropertyFlags memoryPropertyFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-    s32 memoryTypeIndex = -1;
-
-    for (u32 i = 0; i < memProperties.memoryTypeCount; i++) 
-    {
-        if ((typeFilter & (1 << i))  && (memProperties.memoryTypes[i].propertyFlags & memoryPropertyFlags) == memoryPropertyFlags) 
-        {
-            memoryTypeIndex = i;
-            break;
-        }
-    }
-
-    if (memoryTypeIndex == -1)
-    {
-        OutputDebugString("Could not find suitable memory type in physical device");
-        return false;
-    }
-
-    VkMemoryAllocateInfo memoryAllocateInfo = {};
-    memoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    memoryAllocateInfo.pNext = nullptr;
-    memoryAllocateInfo.allocationSize = memRequirements.size;
-    memoryAllocateInfo.memoryTypeIndex = memoryTypeIndex;
-    vkResult = vkAllocateMemory(vkDevice, &memoryAllocateInfo, nullptr, &vertexBufferMemory);
     
-    if (vkResult != VK_SUCCESS)
-    {
-        OutputDebugString("Could not allocate vertex buffer memory.");
-        return false;
-    }
+    // vkResult = vkCreateBuffer(vkDevice, &vertexBufferCreateInfo, nullptr, &vertexBuffer);
+    // if (vkResult != VK_SUCCESS)
+    // {
+    //     OutputDebugString("Could not create a vertex buffer");
+    //     return false;
+    // }
+    
+    // if (vkResult != VK_SUCCESS)
+    // {
+    //     OutputDebugString("Could not allocate vertex buffer memory.");
+    //     return false;
+    // }
 
-    vkBindBufferMemory(vkDevice, vertexBuffer, vertexBufferMemory, 0);
+    // vkBindBufferMemory(vkDevice, vertexBuffer, vertexBufferMemory, 0);
 
+    u32 vertexBufferSize = sizeof(_vertices);
+    VulkanCreateBuffer(
+        vertexBufferSize, 
+        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, 
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        &_vertexBuffer, &_vertexBufferMemory
+    );
     void* data = nullptr;
-    vkResult = vkMapMemory(vkDevice, vertexBufferMemory, 0, vertexBufferCreateInfo.size, 0, &data);
+    vkResult = vkMapMemory(vkDevice, _vertexBufferMemory, 0, vertexBufferSize, 0, &data);
     if (vkResult != VK_SUCCESS)
     {
         OutputDebugString("Could not map vertex buffer memory.");
         return false;
     }
-    memcpy(data, vertices, vertexBufferCreateInfo.size);
-    vkUnmapMemory(vkDevice, vertexBufferMemory);
+    memcpy(data, _vertices, vertexBufferSize);
+    vkUnmapMemory(vkDevice, _vertexBufferMemory);
 
     VkCommandBufferAllocateInfo commandBufferAllocateInfo = {};
     commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;

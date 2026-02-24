@@ -94,7 +94,7 @@ void RecordCommandBuffer(VkCommandBuffer commandBuffer, u32 imageIndex)
     vkCmdSetScissor(commandBuffer, 0, 1, &scissorRect);
 
     VkDeviceSize offset = 0;
-    vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer, &offset);
+    vkCmdBindVertexBuffers(commandBuffer, 0, 1, &_vertexBuffer, &offset);
     vkCmdDraw(commandBuffer, 3, 1, 0, 0);
 
     vkCmdEndRendering(commandBuffer);
