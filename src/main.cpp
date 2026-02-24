@@ -173,6 +173,40 @@ bool RecreateSwapChain()
     swapChainImageFormat = surfaceFormat.format;
     swapChainExtent = extent;
 
+    VkImageSubresourceRange imageSubresourceRanger = {};
+    imageSubresourceRanger.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    imageSubresourceRanger.baseMipLevel = 0;
+    imageSubresourceRanger.levelCount = 1;
+    imageSubresourceRanger.baseArrayLayer = 0;
+    imageSubresourceRanger.layerCount = 1;
+
+    VkImageViewCreateInfo imageViewCreateInfo = {};
+    imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    imageViewCreateInfo.pNext = nullptr;
+    imageViewCreateInfo.flags = 0;
+    imageViewCreateInfo.image = VK_NULL_HANDLE;
+    imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    imageViewCreateInfo.format = swapChainImageFormat;
+    imageViewCreateInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+    imageViewCreateInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+    imageViewCreateInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+    imageViewCreateInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+    imageViewCreateInfo.subresourceRange = imageSubresourceRanger;
+
+    swapChainImageViews = new VkImageView[swapChainImagesCount];
+    for (u32 i = 0; i < swapChainImagesCount; i++)
+    {
+        VkImage currentImage = swapChainImages[i];
+        imageViewCreateInfo.image = currentImage;
+
+         vkResult = vkCreateImageView(vkDevice, &imageViewCreateInfo, nullptr, &swapChainImageViews[i]);
+         if (vkResult != VK_SUCCESS)
+         {
+            OutputDebugString("Failed to create an image view for swap buffer image");
+            return false;
+         }
+    }
+
     return true;
 }
 
@@ -779,40 +813,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
         return -1;
     }
 
-    VkImageSubresourceRange imageSubresourceRanger = {};
-    imageSubresourceRanger.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    imageSubresourceRanger.baseMipLevel = 0;
-    imageSubresourceRanger.levelCount = 1;
-    imageSubresourceRanger.baseArrayLayer = 0;
-    imageSubresourceRanger.layerCount = 1;
-
-    VkImageViewCreateInfo imageViewCreateInfo = {};
-    imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    imageViewCreateInfo.pNext = nullptr;
-    imageViewCreateInfo.flags = 0;
-    imageViewCreateInfo.image = VK_NULL_HANDLE;
-    imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    imageViewCreateInfo.format = swapChainImageFormat;
-    imageViewCreateInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-    imageViewCreateInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-    imageViewCreateInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-    imageViewCreateInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-    imageViewCreateInfo.subresourceRange = imageSubresourceRanger;
-
-    swapChainImageViews = new VkImageView[swapChainImagesCount];
-    for (u32 i = 0; i < swapChainImagesCount; i++)
-    {
-        VkImage currentImage = swapChainImages[i];
-        imageViewCreateInfo.image = currentImage;
-
-         vkResult = vkCreateImageView(vkDevice, &imageViewCreateInfo, nullptr, &swapChainImageViews[i]);
-         if (vkResult != VK_SUCCESS)
-         {
-            OutputDebugString("Failed to create an image view for swap buffer image");
-            return -1;
-         }
-    }
-
     char* shaderFileBytes = nullptr;
     st shaderFileSize = 0;
     bool result = ReadEntireFile("slang.spv", &shaderFileBytes, &shaderFileSize);
@@ -1112,16 +1112,18 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
     }   
 
     vkDeviceWaitIdle(vkDevice);
-
     for (u32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
     {
-        vkDestroySemaphore(vkDevice, acquireSemaphores[i], nullptr);
-        vkDestroyFence(vkDevice, frameFences[i], nullptr);
+        if (acquireSemaphores[i] != VK_NULL_HANDLE)
+            vkDestroySemaphore(vkDevice, acquireSemaphores[i], nullptr);
+        if (frameFences[i] != VK_NULL_HANDLE)
+            vkDestroyFence(vkDevice, frameFences[i], nullptr);
     }
-
     for (u32 i = 0; i < swapChainImagesCount; i++)
-        vkDestroySemaphore(vkDevice, submitSemaphores[i], nullptr);
-
+    {
+        if (submitSemaphores[i] != VK_NULL_HANDLE)
+            vkDestroySemaphore(vkDevice, submitSemaphores[i], nullptr);
+    }
     vkDestroyPipeline(vkDevice, graphicsPipeline, nullptr);
     vkDestroyPipelineLayout(vkDevice, pipelineLayout, nullptr);
     vkDestroyCommandPool(vkDevice, commandPool, nullptr);
@@ -1129,18 +1131,17 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
     for (u32 i = 0; i < swapChainImagesCount; i++)
     {
         if (swapChainImageViews[i] != VK_NULL_HANDLE)
-        {
             vkDestroyImageView(vkDevice, swapChainImageViews[i], nullptr);
-        }
     }
-    delete[] swapChainImageViews;
     vkDestroySwapchainKHR(vkDevice, swapChain, nullptr);
-    delete[] swapChainImages;
-    delete[] shaderFileBytes;
     vkDestroyDevice(vkDevice, NULL);
     vkDestroySurfaceKHR(vkInstance, surface, NULL);
     pfnDestroyDebugUtilsMessengerEXT(vkInstance, vKDebugUtilsMessengerExt, NULL);
     vkDestroyInstance(vkInstance, NULL);
+
+    delete[] swapChainImageViews;
+    delete[] swapChainImages;
+    delete[] shaderFileBytes;
 
     return 0;
 }
