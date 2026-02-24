@@ -96,12 +96,85 @@ bool ReadEntireFile(const char* fileName, char** bufferOut, st* sizeOut)
     return true;
 }
 
+VkDevice vkDevice = VK_NULL_HANDLE;
+VkSwapchainKHR swapChain = VK_NULL_HANDLE;
 const u32 MAX_FRAMES_IN_FLIGHT = 2;
 VkCommandBuffer commandBuffers[MAX_FRAMES_IN_FLIGHT] = {};
+u32 imageCount = 0;
 VkImage* swapChainImages = nullptr;
 VkImageView* swapChainImageViews = nullptr;
 VkExtent2D swapChainExtent = {};
 VkPipeline graphicsPipeline = VK_NULL_HANDLE;
+VkSurfaceKHR surface = VK_NULL_HANDLE;
+VkSurfaceFormatKHR surfaceFormat = {};
+VkExtent2D extent = {};
+VkSurfaceCapabilitiesKHR surfaceCapabilities{}; 
+VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR;
+s32 graphicsQueueIndex = -1;
+s32 presentQueueIndex = -1;
+VkFormat swapChainImageFormat = VK_FORMAT_UNDEFINED;
+u32 swapChainImagesCount = 0;
+
+void CleanUpSwapChain()
+{
+    delete []swapChainImageViews;
+    swapChain = VK_NULL_HANDLE;
+
+}
+
+bool RecreateSwapChain()
+{
+    // CleanUpSwapChain();
+    
+    vkDeviceWaitIdle(vkDevice);
+    VkSwapchainCreateInfoKHR swapChainCreateInfo = {};
+    swapChainCreateInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+    swapChainCreateInfo.pNext = nullptr;
+    swapChainCreateInfo.flags = 0;
+    swapChainCreateInfo.surface = surface;
+    swapChainCreateInfo.minImageCount = imageCount;
+    swapChainCreateInfo.imageFormat = surfaceFormat.format;
+    swapChainCreateInfo.imageColorSpace = surfaceFormat.colorSpace;
+    swapChainCreateInfo.imageExtent = extent;
+    swapChainCreateInfo.imageArrayLayers = 1;
+    swapChainCreateInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    swapChainCreateInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    swapChainCreateInfo.queueFamilyIndexCount = 0;
+    swapChainCreateInfo.pQueueFamilyIndices = nullptr;
+    swapChainCreateInfo.preTransform = surfaceCapabilities.currentTransform;
+    swapChainCreateInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+    swapChainCreateInfo.presentMode = presentMode;
+    swapChainCreateInfo.clipped = true;
+    swapChainCreateInfo.oldSwapchain = VK_NULL_HANDLE;
+
+    u32 queueFamilyIndices[] = {(u32)graphicsQueueIndex, (u32)presentQueueIndex};
+    if (graphicsQueueIndex != presentQueueIndex) 
+    {
+        swapChainCreateInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+        swapChainCreateInfo.queueFamilyIndexCount = 2;
+        swapChainCreateInfo.pQueueFamilyIndices = queueFamilyIndices;
+    }
+
+    VkResult vkResult = vkCreateSwapchainKHR(vkDevice, &swapChainCreateInfo, nullptr, &swapChain);
+    if (vkResult != VK_SUCCESS)
+    {
+        OutputDebugString("Could not create swap chain.\n");
+        return false;
+    }
+
+    vkResult = vkGetSwapchainImagesKHR(vkDevice, swapChain, &swapChainImagesCount, nullptr);
+    if (vkResult != VK_SUCCESS || swapChainImagesCount == 0)
+    {
+        OutputDebugString("Could not determine amount of swap chain images.\n");
+        return false;
+    }
+    swapChainImages = new VkImage[swapChainImagesCount];
+    vkResult = vkGetSwapchainImagesKHR(vkDevice, swapChain, &swapChainImagesCount, swapChainImages);
+    swapChainImageFormat = surfaceFormat.format;
+    swapChainExtent = extent;
+
+    return true;
+}
 
 void RecordCommandBuffer(VkCommandBuffer commandBuffer, u32 imageIndex)
 {
@@ -355,7 +428,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
     }
     OutputDebugString("Created Vulkan Instance\n");
 
-    VkSurfaceKHR surface = nullptr;
     VkWin32SurfaceCreateInfoKHR win32SurfaceCreateInfo{};
     win32SurfaceCreateInfo.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
     win32SurfaceCreateInfo.pNext = nullptr;
@@ -508,8 +580,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
     vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, NULL);    
     VkQueueFamilyProperties* queueFamilies = new VkQueueFamilyProperties[queueFamilyCount];
     vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, queueFamilies);
-    s32 graphicsQueueIndex = -1;
-    s32 presentQueueIndex = -1;
 
     for (s32 i = 0; i < queueFamilyCount; i++)
     {
@@ -630,8 +700,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
     vkDeviceCreateInfo.enabledExtensionCount = ARRAY_COUNT(deviceExtensions);
     vkDeviceCreateInfo.ppEnabledExtensionNames = deviceExtensions;
     vkDeviceCreateInfo.pEnabledFeatures = nullptr;
-
-    VkDevice vkDevice;
     vkResult = vkCreateDevice(physicalDevice, &vkDeviceCreateInfo, nullptr, &vkDevice);
 
     if (vkResult != VK_SUCCESS)
@@ -667,7 +735,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
     vkResult = vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, &surfaceFormatCount, surfaceFormats);
 
     bool foundGoodSurfaceFormat = false;
-    VkSurfaceFormatKHR surfaceFormat;
     for (u32 i = 0; i < surfaceFormatCount; i++)
     {
         VkSurfaceFormatKHR* currentFormat = &surfaceFormats[i];
@@ -682,16 +749,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
     if (!foundGoodSurfaceFormat)
         surfaceFormat = surfaceFormats[0];
 
-    VkSurfaceCapabilitiesKHR surfaceCapabilities{}; 
     vkResult = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, surface, &surfaceCapabilities);
     if (vkResult != VK_SUCCESS)
     {
         OutputDebugString("Could not get physical device surface capabilities\n");
         return -1;
     }
-    VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR;
 
-    VkExtent2D extent{};
     if (surfaceCapabilities.currentExtent.width != UINT32_MAX)
     {
         extent = surfaceCapabilities.currentExtent;
@@ -707,56 +771,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
         extent.height = Clamp(height, surfaceCapabilities.minImageExtent.height, surfaceCapabilities.maxImageExtent.height);
     }
 
-    u32 imageCount = surfaceCapabilities.minImageCount + 1;
+    imageCount = surfaceCapabilities.minImageCount + 1;
     imageCount = Clamp(imageCount, surfaceCapabilities.minImageCount, surfaceCapabilities.maxImageCount);
-
-    VkSwapchainCreateInfoKHR swapChainCreateInfo = {};
-    swapChainCreateInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-    swapChainCreateInfo.pNext = nullptr;
-    swapChainCreateInfo.flags = 0;
-    swapChainCreateInfo.surface = surface;
-    swapChainCreateInfo.minImageCount = imageCount;
-    swapChainCreateInfo.imageFormat = surfaceFormat.format;
-    swapChainCreateInfo.imageColorSpace = surfaceFormat.colorSpace;
-    swapChainCreateInfo.imageExtent = extent;
-    swapChainCreateInfo.imageArrayLayers = 1;
-    swapChainCreateInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-    swapChainCreateInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    swapChainCreateInfo.queueFamilyIndexCount = 0;
-    swapChainCreateInfo.pQueueFamilyIndices = nullptr;
-    swapChainCreateInfo.preTransform = surfaceCapabilities.currentTransform;
-    swapChainCreateInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-    swapChainCreateInfo.presentMode = presentMode;
-    swapChainCreateInfo.clipped = true;
-    swapChainCreateInfo.oldSwapchain = VK_NULL_HANDLE;
-
-    u32 queueFamilyIndices[] = {(u32)graphicsQueueIndex, (u32)presentQueueIndex};
-    if (graphicsQueueIndex != presentQueueIndex) 
+    if (!RecreateSwapChain()) 
     {
-        swapChainCreateInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
-        swapChainCreateInfo.queueFamilyIndexCount = 2;
-        swapChainCreateInfo.pQueueFamilyIndices = queueFamilyIndices;
-    }
-
-    VkSwapchainKHR swapChain;
-    vkResult = vkCreateSwapchainKHR(vkDevice, &swapChainCreateInfo, nullptr, &swapChain);
-    if (vkResult != VK_SUCCESS)
-    {
-        OutputDebugString("Could not create swap chain.\n");
+        OutputDebugString("Failed to create swap chain\n");
         return -1;
     }
-
-    u32 swapChainImagesCount;
-    vkResult = vkGetSwapchainImagesKHR(vkDevice, swapChain, &swapChainImagesCount, nullptr);
-    if (vkResult != VK_SUCCESS || swapChainImagesCount == 0)
-    {
-        OutputDebugString("Could not determine amount of swap chain images.\n");
-        return -1;
-    }
-    swapChainImages = new VkImage[swapChainImagesCount];
-    vkResult = vkGetSwapchainImagesKHR(vkDevice, swapChain, &swapChainImagesCount, swapChainImages);
-    VkFormat swapChainImageFormat = surfaceFormat.format;
-    swapChainExtent = extent;
 
     VkImageSubresourceRange imageSubresourceRanger = {};
     imageSubresourceRanger.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -1004,30 +1025,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
         return -1;
     }
 
-    // RecordCommandBuffer();
-
-    // VkSemaphoreCreateInfo semaphoreCreateInfo = {};
-    // semaphoreCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-    // semaphoreCreateInfo.pNext = nullptr;
-    // semaphoreCreateInfo.flags = 0;
-    // VkFenceCreateInfo fenceCreateInfo = {};
-    // fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-    // fenceCreateInfo.pNext = nullptr;
-    // fenceCreateInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-    
-    // VkSemaphore* renderFinishedSemaphores = new VkSemaphore[swapChainImagesCount];
-    // VkSemaphore* presentCompleteSemaphores = new VkSemaphore[swapChainImagesCount];
-    // VkFence* drawFences = new VkFence[swapChainImagesCount];
-    // for (u32 i = 0; i < swapChainImagesCount; i++)
-    // {
-    //     if (vkCreateSemaphore(vkDevice, &semaphoreCreateInfo, nullptr, &presentCompleteSemaphores[i]) || 
-    //         vkCreateSemaphore(vkDevice, &semaphoreCreateInfo, nullptr, &renderFinishedSemaphores[i]) ||
-    //         vkCreateFence(vkDevice, &fenceCreateInfo, nullptr, &drawFences[i]))
-    //     {
-    //         OutputDebugString("Could not create semaphores and fences.");
-    //         return -1;
-    //     }
-    // }
     VkSemaphoreCreateInfo semaphoreInfo{};
     semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
     
