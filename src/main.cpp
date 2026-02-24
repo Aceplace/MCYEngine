@@ -96,6 +96,7 @@ bool ReadEntireFile(const char* fileName, char** bufferOut, st* sizeOut)
     return true;
 }
 
+HWND _hwnd = NULL;
 VkDevice vkDevice = VK_NULL_HANDLE;
 VkSwapchainKHR swapChain = VK_NULL_HANDLE;
 const u32 MAX_FRAMES_IN_FLIGHT = 2;
@@ -114,17 +115,65 @@ s32 graphicsQueueIndex = -1;
 s32 presentQueueIndex = -1;
 VkFormat swapChainImageFormat = VK_FORMAT_UNDEFINED;
 u32 swapChainImagesCount = 0;
+bool framebufferResized = false;
 
-void CleanUpSwapChain()
-{
-    delete []swapChainImageViews;
-    swapChain = VK_NULL_HANDLE;
+// void CleanUpSwapChain()
+// {
+//     if (swapChainImageViews)
+//     {
+//         for (u32 i = 0; i < swapChainImagesCount; i++)
+//         {
+//             if (swapChainImageViews[i] != VK_NULL_HANDLE)
+//                 vkDestroyImageView(vkDevice, swapChainImageViews[i], nullptr);
+//         }
+//         delete[] swapChainImageViews;
+//     }
 
-}
+//     if (swapChain != VK_NULL_HANDLE)
+//     {
+//          vkDestroySwapchainKHR(vkDevice, swapChain, nullptr);
+//     }
+//     swapChain = VK_NULL_HANDLE;
+//     swapChainImagesCount = 0;
+// }
 
 bool RecreateSwapChain()
 {
-    // CleanUpSwapChain();
+    OutputDebugString("Creating a new swap chain.");
+    VkSwapchainKHR oldSwapChain = swapChain;
+    if (swapChainImageViews)
+    {
+        for (u32 i = 0; i < swapChainImagesCount; i++)
+        {
+            if (swapChainImageViews[i] != VK_NULL_HANDLE)
+            vkDestroyImageView(vkDevice, swapChainImageViews[i], nullptr);
+        }
+        delete[] swapChainImageViews;
+    }
+    swapChainImagesCount = 0;
+
+    // Wait for non-minimized window
+    RECT rect;
+    int width = 0, height = 0;
+    while (width == 0 || height == 0)
+    {
+        if (!GetClientRect(_hwnd, &rect))
+        {
+            Sleep(1);
+            continue;
+        }
+
+        width = rect.right - rect.left;
+        height = rect.bottom - rect.top;
+
+        MSG msg;
+        while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE))
+        {
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
+        }
+        Sleep(1);
+    }
     
     vkDeviceWaitIdle(vkDevice);
     VkSwapchainCreateInfoKHR swapChainCreateInfo = {};
@@ -145,7 +194,7 @@ bool RecreateSwapChain()
     swapChainCreateInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
     swapChainCreateInfo.presentMode = presentMode;
     swapChainCreateInfo.clipped = true;
-    swapChainCreateInfo.oldSwapchain = VK_NULL_HANDLE;
+    swapChainCreateInfo.oldSwapchain = oldSwapChain;
 
     u32 queueFamilyIndices[] = {(u32)graphicsQueueIndex, (u32)presentQueueIndex};
     if (graphicsQueueIndex != presentQueueIndex) 
@@ -160,6 +209,11 @@ bool RecreateSwapChain()
     {
         OutputDebugString("Could not create swap chain.\n");
         return false;
+    }
+
+    if (oldSwapChain != VK_NULL_HANDLE && oldSwapChain != swapChain)
+    {
+        vkDestroySwapchainKHR(vkDevice, oldSwapChain, nullptr);
     }
 
     vkResult = vkGetSwapchainImagesKHR(vkDevice, swapChain, &swapChainImagesCount, nullptr);
@@ -339,9 +393,6 @@ void RecordCommandBuffer(VkCommandBuffer commandBuffer, u32 imageIndex)
     vkEndCommandBuffer(commandBuffer);
 }
 
-
-LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
-
 static VKAPI_ATTR VkBool32 VKAPI_CALL VulkanDebgCallback(
     VkDebugUtilsMessageSeverityFlagBitsEXT   messageSeverity,
     VkDebugUtilsMessageTypeFlagsEXT          messageTypes,
@@ -351,10 +402,11 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL VulkanDebgCallback(
     char messageBuffer[512];
     sprintf_s(messageBuffer, 512, "Vulkan validation layer: %s\n", pCallbackData->pMessage);
     OutputDebugString(messageBuffer);
-
+    
     return VK_FALSE;
 }
-
+    
+LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine, int nCmdShow)
 {
     const char* CLASS_NAME  = "Sample Window Class";
@@ -368,7 +420,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
 
     RegisterClassA(&wc);
 
-    HWND hwnd = CreateWindowExA(
+    _hwnd = CreateWindowExA(
         0,                              // Optional window styles.
         CLASS_NAME,                     // Window class
         "Learn to Program Windows",    // Window text
@@ -383,12 +435,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
         NULL        // Additional application data
         );
 
-    if (hwnd == NULL)
+    if (_hwnd == NULL)
     {
         return 0;
     }
 
-    ShowWindow(hwnd, nCmdShow);
+    ShowWindow(_hwnd, nCmdShow);
 
     VkResult vkResult;
 
@@ -466,7 +518,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
     win32SurfaceCreateInfo.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
     win32SurfaceCreateInfo.pNext = nullptr;
     win32SurfaceCreateInfo.flags = 0;
-    win32SurfaceCreateInfo.hwnd = hwnd;
+    win32SurfaceCreateInfo.hwnd = _hwnd;
     win32SurfaceCreateInfo.hinstance = GetModuleHandle(nullptr);
 
     vkResult = vkCreateWin32SurfaceKHR(vkInstance, &win32SurfaceCreateInfo, nullptr, &surface);
@@ -797,7 +849,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
     else
     {
         RECT rect;
-        GetClientRect(hwnd, &rect);
+        GetClientRect(_hwnd, &rect);
         u32 width  = u32(rect.right  - rect.left);
         u32 height = u32(rect.bottom - rect.top);
 
@@ -806,7 +858,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
     }
 
     imageCount = surfaceCapabilities.minImageCount + 1;
-    imageCount = Clamp(imageCount, surfaceCapabilities.minImageCount, surfaceCapabilities.maxImageCount);
+    // imageCount = Clamp(imageCount, surfaceCapabilities.minImageCount, surfaceCapabilities.maxImageCount);
+    if (surfaceCapabilities.maxImageCount > 0 && imageCount > surfaceCapabilities.maxImageCount)
+        imageCount = surfaceCapabilities.maxImageCount;
     if (!RecreateSwapChain()) 
     {
         OutputDebugString("Failed to create swap chain\n");
@@ -815,8 +869,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
 
     char* shaderFileBytes = nullptr;
     st shaderFileSize = 0;
-    bool result = ReadEntireFile("slang.spv", &shaderFileBytes, &shaderFileSize);
-    if (!result)
+    bool nVkResult = ReadEntireFile("slang.spv", &shaderFileBytes, &shaderFileSize);
+    if (!nVkResult)
     {
         OutputDebugString("Failed to read shader file\n");
         return -1;
@@ -1072,11 +1126,28 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
             TranslateMessage(&msg);
             DispatchMessage(&msg);
 
-            vkWaitForFences(vkDevice, 1, &frameFences[currentFrameInFlightIndex], VK_TRUE, UINT64_MAX);
-            vkResetFences(vkDevice, 1, &frameFences[currentFrameInFlightIndex]);
+            vkResult = vkWaitForFences(vkDevice, 1, &frameFences[currentFrameInFlightIndex], VK_TRUE, UINT64_MAX);
+            if (vkResult != VK_SUCCESS)
+            {
+                OutputDebugString("Failed to wait for fetch");
+            }
             
             u32 imageIndex;
-            vkAcquireNextImageKHR(vkDevice, swapChain, UINT64_MAX, acquireSemaphores[currentFrameInFlightIndex], VK_NULL_HANDLE, &imageIndex);
+            vkResult = vkAcquireNextImageKHR(vkDevice, swapChain, UINT64_MAX, acquireSemaphores[currentFrameInFlightIndex], VK_NULL_HANDLE, &imageIndex);
+            if (vkResult == VK_ERROR_OUT_OF_DATE_KHR)
+            {
+                RecreateSwapChain();
+                continue;
+            }
+            vkResetFences(vkDevice, 1, &frameFences[currentFrameInFlightIndex]);
+            
+            if (vkResult != VK_SUCCESS && vkResult != VK_SUBOPTIMAL_KHR)
+            {
+                if (vkResult != VK_TIMEOUT && vkResult != VK_NOT_READY)
+                    OutputDebugString("Unexpected return value from acquire image");
+                OutputDebugString("Failed to acquire swap chain image!");
+                return -1;
+            }
             vkResetCommandBuffer(commandBuffers[currentFrameInFlightIndex], 0);
             RecordCommandBuffer(commandBuffers[currentFrameInFlightIndex], imageIndex);
 
@@ -1106,6 +1177,19 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
             presentInfo.pImageIndices = &imageIndex;
             presentInfo.pResults = nullptr;
             vkResult = vkQueuePresentKHR(presentQueue, &presentInfo);
+            if (vkResult == VK_SUBOPTIMAL_KHR || vkResult == VK_ERROR_OUT_OF_DATE_KHR || framebufferResized)
+            {
+                framebufferResized = false;
+                RecreateSwapChain();
+            }
+            else
+            {
+                if (vkResult != VK_SUCCESS)
+                {
+                    OutputDebugString("Unexpected return value from queue present");
+                    return -1;
+                }
+            }
 
             currentFrameInFlightIndex = (currentFrameInFlightIndex + 1) % MAX_FRAMES_IN_FLIGHT;
         }
@@ -1128,10 +1212,18 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
     vkDestroyPipelineLayout(vkDevice, pipelineLayout, nullptr);
     vkDestroyCommandPool(vkDevice, commandPool, nullptr);
     vkDestroyShaderModule(vkDevice, shaderModule, nullptr);
-    for (u32 i = 0; i < swapChainImagesCount; i++)
+    if (swapChainImageViews)
     {
-        if (swapChainImageViews[i] != VK_NULL_HANDLE)
-            vkDestroyImageView(vkDevice, swapChainImageViews[i], nullptr);
+        for (u32 i = 0; i < swapChainImagesCount; i++)
+        {
+            if (swapChainImageViews[i] != VK_NULL_HANDLE)
+                vkDestroyImageView(vkDevice, swapChainImageViews[i], nullptr);
+        }
+        delete[] swapChainImageViews;
+    }
+    if (swapChain != VK_NULL_HANDLE)
+    {
+         vkDestroySwapchainKHR(vkDevice, swapChain, nullptr);
     }
     vkDestroySwapchainKHR(vkDevice, swapChain, nullptr);
     vkDestroyDevice(vkDevice, NULL);
@@ -1153,6 +1245,10 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
     case WM_DESTROY:
         PostQuitMessage(0);
         return 0;
+
+    case WM_SIZE:
+        framebufferResized = true;
+        break;
 
     case WM_PAINT:
         {
