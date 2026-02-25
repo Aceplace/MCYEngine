@@ -12,15 +12,19 @@ struct Vertex
 
 };
 
-const Vertex __vertices[] = {
-    {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-    {{0.5f, 0.5f}, {1.0f, 0.0f, 0.0f}},
-    {{-0.5f, 0.5f}, {1.0f, 0.0f, 0.0f}}
+const Vertex vertices[] = {
+    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+    {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
+    {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
+    {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
 };
-VkBuffer __vertexBuffer = VK_NULL_HANDLE;
-VkDeviceMemory __vertexBufferMemory = VK_NULL_HANDLE;
 
+const u16 indices[] = {
+    0, 1, 2, 2, 3, 0
+};
 
+// VkBuffer __vertexBuffer = VK_NULL_HANDLE;
+// VkDeviceMemory __vertexBufferMemory = VK_NULL_HANDLE;
 
 VkVertexInputBindingDescription VertexGetBindingDescription()
 {
@@ -84,7 +88,9 @@ VkInstance vkInstance = VK_NULL_HANDLE;
 char* shaderFileBytes = nullptr;
 VkDebugUtilsMessengerEXT vKDebugUtilsMessengerExt = VK_NULL_HANDLE;
 PFN_vkDestroyDebugUtilsMessengerEXT pfnDestroyDebugUtilsMessengerEXT = nullptr;
-VkPhysicalDevice physicalDevice = nullptr;
+VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
+VkBuffer indexBuffer = VK_NULL_HANDLE;
+VkBuffer indexBufferBuffer = VK_NULL_HANDLE;
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL VulkanDebgCallback(
     VkDebugUtilsMessageSeverityFlagBitsEXT   messageSeverity,
@@ -256,6 +262,8 @@ bool RecreateSwapChain()
     }
     
     vkDeviceWaitIdle(vkDevice);
+
+    
     VkSwapchainCreateInfoKHR swapChainCreateInfo = {};
     swapChainCreateInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
     swapChainCreateInfo.pNext = nullptr;
@@ -996,53 +1004,53 @@ bool VulkanInitialize()
     // memcpy(data, _vertices, vertexBufferSize);
     // vkUnmapMemory(vkDevice, _vertexBufferMemory);
 
-    VkDeviceSize vertexBufferSize = sizeof(__vertices);
+    VkDeviceSize vertexBufferSize = sizeof(vertices);
 
-    VkBufferCreateInfo stagingCreateInfo = {};
-    stagingCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    stagingCreateInfo.pNext = nullptr;
-    stagingCreateInfo.flags = 0;
-    stagingCreateInfo.size = vertexBufferSize;
-    stagingCreateInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT; 
-    stagingCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    stagingCreateInfo.queueFamilyIndexCount = 0;
-    stagingCreateInfo.pQueueFamilyIndices = nullptr;
+    VkBufferCreateInfo stagingForVerticesCreateInfo = {};
+    stagingForVerticesCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    stagingForVerticesCreateInfo.pNext = nullptr;
+    stagingForVerticesCreateInfo.flags = 0;
+    stagingForVerticesCreateInfo.size = vertexBufferSize;
+    stagingForVerticesCreateInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT; 
+    stagingForVerticesCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    stagingForVerticesCreateInfo.queueFamilyIndexCount = 0;
+    stagingForVerticesCreateInfo.pQueueFamilyIndices = nullptr;
 
-    VkBuffer stagingBuffer = VK_NULL_HANDLE;
-    vkResult = vkCreateBuffer(vkDevice, &stagingCreateInfo, nullptr, &stagingBuffer);
+    VkBuffer stagingBufferForVertices = VK_NULL_HANDLE;
+    vkResult = vkCreateBuffer(vkDevice, &stagingForVerticesCreateInfo, nullptr, &stagingBufferForVertices);
     if (vkResult != VK_SUCCESS)
     {
         OutputDebugString("Could not create staging buffer");
         return false;
     }
 
-    VkMemoryRequirements stagingBufferMemRequirements = {};
-    vkGetBufferMemoryRequirements(vkDevice, stagingBuffer, &stagingBufferMemRequirements);
+    VkMemoryRequirements stagingBufferForVerticesMemRequirements = {};
+    vkGetBufferMemoryRequirements(vkDevice, stagingBufferForVertices, &stagingBufferForVerticesMemRequirements);
 
-    VkMemoryAllocateInfo stagingMemoryAllocateInfo = {};
-    stagingMemoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    stagingMemoryAllocateInfo.pNext = nullptr;
-    stagingMemoryAllocateInfo.allocationSize = stagingBufferMemRequirements.size;
-    stagingMemoryAllocateInfo.memoryTypeIndex = VulkanFindMemoryTypeIndex(stagingBufferMemRequirements.memoryTypeBits, 
+    VkMemoryAllocateInfo stagingBufferForVerticesMemoryAllocateInfo = {};
+    stagingBufferForVerticesMemoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    stagingBufferForVerticesMemoryAllocateInfo.pNext = nullptr;
+    stagingBufferForVerticesMemoryAllocateInfo.allocationSize = stagingBufferForVerticesMemRequirements.size;
+    stagingBufferForVerticesMemoryAllocateInfo.memoryTypeIndex = VulkanFindMemoryTypeIndex(stagingBufferForVerticesMemRequirements.memoryTypeBits, 
                                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-    VkDeviceMemory stagingBufferMemory = VK_NULL_HANDLE;
-    vkResult = vkAllocateMemory(vkDevice, &stagingMemoryAllocateInfo, nullptr, &stagingBufferMemory);
+    VkDeviceMemory stagingBufferForVerticesMemory = VK_NULL_HANDLE;
+    vkResult = vkAllocateMemory(vkDevice, &stagingBufferForVerticesMemoryAllocateInfo, nullptr, &stagingBufferForVerticesMemory);
     if (vkResult != VK_SUCCESS)
     {
         OutputDebugString("Could not allocate memory for staging buffer");
         return false;
     }
 
-    vkBindBufferMemory(vkDevice, stagingBuffer, stagingBufferMemory, 0);
+    vkBindBufferMemory(vkDevice, stagingBufferForVertices, stagingBufferForVerticesMemory, 0);
     void* data = nullptr;
-    vkResult = vkMapMemory(vkDevice, stagingBufferMemory, 0, vertexBufferSize, 0, &data);
+    vkResult = vkMapMemory(vkDevice, stagingBufferForVerticesMemory, 0, vertexBufferSize, 0, &data);
     if (vkResult != VK_SUCCESS)
     {
         OutputDebugString("Could not map staging memory.");
         return false;
     }
-    memcpy(data, __vertices, vertexBufferSize);
-    vkUnmapMemory(vkDevice, stagingBufferMemory);
+    memcpy(data, vertices, vertexBufferSize);
+    vkUnmapMemory(vkDevice, stagingBufferForVerticesMemory);
 
     VkBufferCreateInfo vertexBufferCreateInfo = {};
     vertexBufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -1078,9 +1086,99 @@ bool VulkanInitialize()
     }
 
     vkBindBufferMemory(vkDevice, vertexBuffer, vertexBufferMemory, 0);
-    VulkanCopyBuffer(stagingBuffer, vertexBuffer, vertexBufferSize);
+    VulkanCopyBuffer(stagingBufferForVertices, vertexBuffer, vertexBufferSize);
 
     /////////////////
+    /////////////////
+
+    u32 indexBufferSize = sizeof(indices);
+
+    VkBufferCreateInfo stagingForIndicesCreateInfo = {};
+    stagingForIndicesCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    stagingForIndicesCreateInfo.pNext = nullptr;
+    stagingForIndicesCreateInfo.flags = 0;
+    stagingForIndicesCreateInfo.size = indexBufferSize;
+    stagingForIndicesCreateInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT; 
+    stagingForIndicesCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    stagingForIndicesCreateInfo.queueFamilyIndexCount = 0;
+    stagingForIndicesCreateInfo.pQueueFamilyIndices = nullptr;
+
+    VkBuffer stagingBufferForIndices = VK_NULL_HANDLE;
+    vkResult = vkCreateBuffer(vkDevice, &stagingForIndicesCreateInfo, nullptr, &stagingBufferForIndices);
+    if (vkResult != VK_SUCCESS)
+    {
+        OutputDebugString("Could not create staging buffer");
+        return false;
+    }
+
+    VkMemoryRequirements stagingBufferForIndicesMemRequirements = {};
+    vkGetBufferMemoryRequirements(vkDevice, stagingBufferForIndices, &stagingBufferForIndicesMemRequirements);
+
+    VkMemoryAllocateInfo stagingBufferForIndicesMemoryAllocateInfo = {};
+    stagingBufferForIndicesMemoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    stagingBufferForIndicesMemoryAllocateInfo.pNext = nullptr;
+    stagingBufferForIndicesMemoryAllocateInfo.allocationSize = stagingBufferForIndicesMemRequirements.size;
+    stagingBufferForIndicesMemoryAllocateInfo.memoryTypeIndex = VulkanFindMemoryTypeIndex(stagingBufferForIndicesMemRequirements.memoryTypeBits, 
+                                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    VkDeviceMemory stagingBufferForIndicesMemory = VK_NULL_HANDLE;
+    vkResult = vkAllocateMemory(vkDevice, &stagingBufferForIndicesMemoryAllocateInfo, nullptr, &stagingBufferForIndicesMemory);
+    if (vkResult != VK_SUCCESS)
+    {
+        OutputDebugString("Could not allocate memory for staging buffer");
+        return false;
+    }
+
+    vkBindBufferMemory(vkDevice, stagingBufferForIndices, stagingBufferForIndicesMemory, 0);
+    data = nullptr;
+    vkResult = vkMapMemory(vkDevice, stagingBufferForIndicesMemory, 0, indexBufferSize, 0, &data);
+    if (vkResult != VK_SUCCESS)
+    {
+        OutputDebugString("Could not map staging memory.");
+        return false;
+    }
+    memcpy(data, indices, indexBufferSize);
+    vkUnmapMemory(vkDevice, stagingBufferForIndicesMemory);
+
+    ///
+
+    VkBufferCreateInfo indexBufferCreateInfo = {};
+    indexBufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    indexBufferCreateInfo.pNext = nullptr;
+    indexBufferCreateInfo.flags = 0;
+    indexBufferCreateInfo.size = vertexBufferSize;
+    indexBufferCreateInfo.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    indexBufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    indexBufferCreateInfo.queueFamilyIndexCount = 0;
+    indexBufferCreateInfo.pQueueFamilyIndices = nullptr;
+
+    vkResult = vkCreateBuffer(vkDevice, &indexBufferCreateInfo, nullptr, &indexBuffer);
+    if (vkResult != VK_SUCCESS)
+    {
+        OutputDebugString("Could not create index buffer");
+        return false;
+    }
+
+    VkMemoryRequirements indexBufferMemRequirements = {};
+    vkGetBufferMemoryRequirements(vkDevice, indexBuffer, &indexBufferMemRequirements);
+    
+    VkMemoryAllocateInfo indexBufferMemoryAllocateInfo = {};
+    indexBufferMemoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    indexBufferMemoryAllocateInfo.pNext = nullptr;
+    indexBufferMemoryAllocateInfo.allocationSize = indexBufferMemRequirements.size;
+    indexBufferMemoryAllocateInfo.memoryTypeIndex = VulkanFindMemoryTypeIndex(indexBufferMemRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    VkDeviceMemory indexBufferMemory = VK_NULL_HANDLE;
+    vkResult = vkAllocateMemory(vkDevice, &indexBufferMemoryAllocateInfo, nullptr, &indexBufferMemory);
+    if (vkResult != VK_SUCCESS)
+    {
+        OutputDebugString("Could not allocate memory for vertex buffer");
+        return false;
+    }
+
+    vkBindBufferMemory(vkDevice, indexBuffer, indexBufferMemory, 0);
+    VulkanCopyBuffer(stagingBufferForIndices, indexBuffer, indexBufferSize);
+
+    ///////////////////
+    ///////////////////
     
     VkCommandBufferAllocateInfo commandBufferAllocateInfo = {};
     commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -1130,7 +1228,7 @@ void VulkanCleanUp()
 {
     if (vkDevice != VK_NULL_HANDLE)
         vkDeviceWaitIdle(vkDevice);
-        
+
     for (u32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
     {
         if (acquireSemaphores[i] != VK_NULL_HANDLE)

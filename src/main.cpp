@@ -95,7 +95,8 @@ void RecordCommandBuffer(VkCommandBuffer commandBuffer, u32 imageIndex)
 
     VkDeviceSize offset = 0;
     vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer, &offset);
-    vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+    vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT16);
+    vkCmdDrawIndexed(commandBuffer, sizeof(indices), 1, 0, 0, 0);
 
     vkCmdEndRendering(commandBuffer);
     barrier = {};
