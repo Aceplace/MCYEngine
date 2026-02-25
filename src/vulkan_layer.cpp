@@ -262,8 +262,34 @@ bool RecreateSwapChain()
     }
     
     vkDeviceWaitIdle(vkDevice);
+    VkResult vkResult = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, surface, &surfaceCapabilities);
+    if (vkResult != VK_SUCCESS)
+    {
+        OutputDebugString("Could not get physical device surface capabilities\n");
+        return false;
+    }
 
-    
+    if (surfaceCapabilities.currentExtent.width != UINT32_MAX)
+    {
+        extent = surfaceCapabilities.currentExtent;
+    }
+    else
+    {
+        RECT rect;
+        GetClientRect(_hwnd, &rect);
+        u32 width  = u32(rect.right  - rect.left);
+        u32 height = u32(rect.bottom - rect.top);
+
+        extent.width = Clamp(width, surfaceCapabilities.minImageExtent.width, surfaceCapabilities.maxImageExtent.width);
+        extent.height = Clamp(height, surfaceCapabilities.minImageExtent.height, surfaceCapabilities.maxImageExtent.height);
+    }
+
+    imageCount = surfaceCapabilities.minImageCount + 1;
+    // imageCount = Clamp(imageCount, surfaceCapabilities.minImageCount, surfaceCapabilities.maxImageCount);
+    if (surfaceCapabilities.maxImageCount > 0 && imageCount > surfaceCapabilities.maxImageCount)
+        imageCount = surfaceCapabilities.maxImageCount;
+
+
     VkSwapchainCreateInfoKHR swapChainCreateInfo = {};
     swapChainCreateInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
     swapChainCreateInfo.pNext = nullptr;
@@ -292,7 +318,7 @@ bool RecreateSwapChain()
         swapChainCreateInfo.pQueueFamilyIndices = queueFamilyIndices;
     }
 
-    VkResult vkResult = vkCreateSwapchainKHR(vkDevice, &swapChainCreateInfo, nullptr, &swapChain);
+    vkResult = vkCreateSwapchainKHR(vkDevice, &swapChainCreateInfo, nullptr, &swapChain);
     if (vkResult != VK_SUCCESS)
     {
         OutputDebugString("Could not create swap chain.\n");
@@ -741,32 +767,7 @@ bool VulkanInitialize()
     if (!foundGoodSurfaceFormat)
         surfaceFormat = surfaceFormats[0];
 
-    vkResult = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, surface, &surfaceCapabilities);
-    if (vkResult != VK_SUCCESS)
-    {
-        OutputDebugString("Could not get physical device surface capabilities\n");
-        return false;
-    }
-
-    if (surfaceCapabilities.currentExtent.width != UINT32_MAX)
-    {
-        extent = surfaceCapabilities.currentExtent;
-    }
-    else
-    {
-        RECT rect;
-        GetClientRect(_hwnd, &rect);
-        u32 width  = u32(rect.right  - rect.left);
-        u32 height = u32(rect.bottom - rect.top);
-
-        extent.width = Clamp(width, surfaceCapabilities.minImageExtent.width, surfaceCapabilities.maxImageExtent.width);
-        extent.height = Clamp(height, surfaceCapabilities.minImageExtent.height, surfaceCapabilities.maxImageExtent.height);
-    }
-
-    imageCount = surfaceCapabilities.minImageCount + 1;
-    // imageCount = Clamp(imageCount, surfaceCapabilities.minImageCount, surfaceCapabilities.maxImageCount);
-    if (surfaceCapabilities.maxImageCount > 0 && imageCount > surfaceCapabilities.maxImageCount)
-        imageCount = surfaceCapabilities.maxImageCount;
+    
     if (!RecreateSwapChain()) 
     {
         OutputDebugString("Failed to create swap chain\n");
