@@ -725,183 +725,32 @@ bool VkmInitialize()
         OutputDebugString("Could not create vertex staging buffer\n.");
         return false;
     }
-
-    // VkBufferCreateInfo stagingBufferForVerticesCreateInfo = {};
-    // stagingBufferForVerticesCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    // stagingBufferForVerticesCreateInfo.pNext = nullptr;
-    // stagingBufferForVerticesCreateInfo.flags = 0;
-    // stagingBufferForVerticesCreateInfo.size = vertexBufferSize;
-    // stagingBufferForVerticesCreateInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT; 
-    // stagingBufferForVerticesCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    // stagingBufferForVerticesCreateInfo.queueFamilyIndexCount = 0;
-    // stagingBufferForVerticesCreateInfo.pQueueFamilyIndices = nullptr;
-
-    // VkBuffer stagingBufferForVertices = VK_NULL_HANDLE;
-    // vkResult = vkCreateBuffer(vkm.vkDevice, &stagingBufferForVerticesCreateInfo, nullptr, &stagingBufferForVertices);
-    // if (vkResult != VK_SUCCESS)
-    // {
-    //     OutputDebugString("Could not create staging buffer");
-    //     return false;
-    // }
-
-    // VkMemoryRequirements stagingBufferForVerticesMemRequirements = {};
-    // vkGetBufferMemoryRequirements(vkm.vkDevice, stagingBufferForVertices, &stagingBufferForVerticesMemRequirements);
-
-    // VkMemoryAllocateInfo stagingBufferForVerticesMemoryAllocateInfo = {};
-    // stagingBufferForVerticesMemoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    // stagingBufferForVerticesMemoryAllocateInfo.pNext = nullptr;
-    // stagingBufferForVerticesMemoryAllocateInfo.allocationSize = stagingBufferForVerticesMemRequirements.size;
-    // stagingBufferForVerticesMemoryAllocateInfo.memoryTypeIndex = VkmFindMemoryTypeIndex(stagingBufferForVerticesMemRequirements.memoryTypeBits, 
-    //                             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-    // VkDeviceMemory stagingBufferForVerticesMemory = VK_NULL_HANDLE;
-    // vkResult = vkAllocateMemory(vkm.vkDevice, &stagingBufferForVerticesMemoryAllocateInfo, nullptr, &stagingBufferForVerticesMemory);
-    // if (vkResult != VK_SUCCESS)
-    // {
-    //     OutputDebugString("Could not allocate memory for staging buffer");
-    //     return false;
-    // }
-
-    // vkBindBufferMemory(vkm.vkDevice, stagingBufferForVertices, stagingBufferForVerticesMemory, 0);
-
     
-    // void* data = nullptr;
-    // vkResult = vkMapMemory(vkm.vkDevice, stagingBufferForVerticesMemory, 0, vertexBufferSize, 0, &data);
-    // if (vkResult != VK_SUCCESS)
-    // {
-    //     OutputDebugString("Could not map staging memory.");
-    //     return false;
-    // }
-    // memcpy(data, vertices, vertexBufferSize);
-    // vkUnmapMemory(vkm.vkDevice, stagingBufferForVerticesMemory);
-
-    VkBufferCreateInfo vertexBufferCreateInfo = {};
-    vertexBufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    vertexBufferCreateInfo.pNext = nullptr;
-    vertexBufferCreateInfo.flags = 0;
-    vertexBufferCreateInfo.size = vertexBufferSize;
-    vertexBufferCreateInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-    vertexBufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    vertexBufferCreateInfo.queueFamilyIndexCount = 0;
-    vertexBufferCreateInfo.pQueueFamilyIndices = nullptr;
-
-    vkResult = vkCreateBuffer(vkm.vkDevice, &vertexBufferCreateInfo, nullptr, &vkm.vertexBuffer);
-    if (vkResult != VK_SUCCESS)
+    VkDeviceMemory vertexBufferForVerticesMemory = VK_NULL_HANDLE;
+    if (!VkmCreateBuffer(vertexBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &vkm.vertexBuffer, &vertexBufferForVerticesMemory))
     {
-        OutputDebugString("Could not create vertex buffer");
+        OutputDebugString("Could not create vertex staging buffer\n.");
         return false;
     }
-
-    VkMemoryRequirements vertexBufferMemRequirements = {};
-    vkGetBufferMemoryRequirements(vkm.vkDevice, vkm.vertexBuffer, &vertexBufferMemRequirements);
-    
-    VkMemoryAllocateInfo vertexBufferMemoryAllocateInfo = {};
-    vertexBufferMemoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    vertexBufferMemoryAllocateInfo.pNext = nullptr;
-    vertexBufferMemoryAllocateInfo.allocationSize = vertexBufferMemRequirements.size;
-    vertexBufferMemoryAllocateInfo.memoryTypeIndex = VkmFindMemoryTypeIndex(vertexBufferMemRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-    VkDeviceMemory vertexBufferMemory = VK_NULL_HANDLE;
-    vkResult = vkAllocateMemory(vkm.vkDevice, &vertexBufferMemoryAllocateInfo, nullptr, &vertexBufferMemory);
-    if (vkResult != VK_SUCCESS)
-    {
-        OutputDebugString("Could not allocate memory for vertex buffer");
-        return false;
-    }
-
-    vkBindBufferMemory(vkm.vkDevice, vkm.vertexBuffer, vertexBufferMemory, 0);
     VkmCopyBuffer(stagingBufferForVertices, vkm.vertexBuffer, vertexBufferSize);
-
-    /////////////////
-    /////////////////
-
-    u32 indexBufferSize = sizeof(indices);
-
-    VkBufferCreateInfo stagingForIndicesCreateInfo = {};
-    stagingForIndicesCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    stagingForIndicesCreateInfo.pNext = nullptr;
-    stagingForIndicesCreateInfo.flags = 0;
-    stagingForIndicesCreateInfo.size = indexBufferSize;
-    stagingForIndicesCreateInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT; 
-    stagingForIndicesCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    stagingForIndicesCreateInfo.queueFamilyIndexCount = 0;
-    stagingForIndicesCreateInfo.pQueueFamilyIndices = nullptr;
-
+    
+    VkDeviceSize indexBufferSize = sizeof(indices);
     VkBuffer stagingBufferForIndices = VK_NULL_HANDLE;
-    vkResult = vkCreateBuffer(vkm.vkDevice, &stagingForIndicesCreateInfo, nullptr, &stagingBufferForIndices);
-    if (vkResult != VK_SUCCESS)
-    {
-        OutputDebugString("Could not create staging buffer");
-        return false;
-    }
-
-    VkMemoryRequirements stagingBufferForIndicesMemRequirements = {};
-    vkGetBufferMemoryRequirements(vkm.vkDevice, stagingBufferForIndices, &stagingBufferForIndicesMemRequirements);
-
-    VkMemoryAllocateInfo stagingBufferForIndicesMemoryAllocateInfo = {};
-    stagingBufferForIndicesMemoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    stagingBufferForIndicesMemoryAllocateInfo.pNext = nullptr;
-    stagingBufferForIndicesMemoryAllocateInfo.allocationSize = stagingBufferForIndicesMemRequirements.size;
-    stagingBufferForIndicesMemoryAllocateInfo.memoryTypeIndex = VkmFindMemoryTypeIndex(stagingBufferForIndicesMemRequirements.memoryTypeBits, 
-                                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
     VkDeviceMemory stagingBufferForIndicesMemory = VK_NULL_HANDLE;
-    vkResult = vkAllocateMemory(vkm.vkDevice, &stagingBufferForIndicesMemoryAllocateInfo, nullptr, &stagingBufferForIndicesMemory);
-    if (vkResult != VK_SUCCESS)
+    if (!VkmCreateAndFillBuffer(indexBufferSize, (void*)indices, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingBufferForIndices, &stagingBufferForIndicesMemory))
     {
-        OutputDebugString("Could not allocate memory for staging buffer");
+        OutputDebugString("Could not create index staging buffer\n.");
         return false;
     }
-
-    vkBindBufferMemory(vkm.vkDevice, stagingBufferForIndices, stagingBufferForIndicesMemory, 0);
-    void* data = nullptr;
-    vkResult = vkMapMemory(vkm.vkDevice, stagingBufferForIndicesMemory, 0, indexBufferSize, 0, &data);
-    if (vkResult != VK_SUCCESS)
-    {
-        OutputDebugString("Could not map staging memory.");
-        return false;
-    }
-    memcpy(data, indices, indexBufferSize);
-    vkUnmapMemory(vkm.vkDevice, stagingBufferForIndicesMemory);
-
-    ///
-
-    VkBufferCreateInfo indexBufferCreateInfo = {};
-    indexBufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    indexBufferCreateInfo.pNext = nullptr;
-    indexBufferCreateInfo.flags = 0;
-    indexBufferCreateInfo.size = vertexBufferSize;
-    indexBufferCreateInfo.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-    indexBufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    indexBufferCreateInfo.queueFamilyIndexCount = 0;
-    indexBufferCreateInfo.pQueueFamilyIndices = nullptr;
-
-    vkResult = vkCreateBuffer(vkm.vkDevice, &indexBufferCreateInfo, nullptr, &vkm.indexBuffer);
-    if (vkResult != VK_SUCCESS)
-    {
-        OutputDebugString("Could not create index buffer");
-        return false;
-    }
-
-    VkMemoryRequirements indexBufferMemRequirements = {};
-    vkGetBufferMemoryRequirements(vkm.vkDevice, vkm.indexBuffer, &indexBufferMemRequirements);
     
-    VkMemoryAllocateInfo indexBufferMemoryAllocateInfo = {};
-    indexBufferMemoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    indexBufferMemoryAllocateInfo.pNext = nullptr;
-    indexBufferMemoryAllocateInfo.allocationSize = indexBufferMemRequirements.size;
-    indexBufferMemoryAllocateInfo.memoryTypeIndex = VkmFindMemoryTypeIndex(indexBufferMemRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
     VkDeviceMemory indexBufferMemory = VK_NULL_HANDLE;
-    vkResult = vkAllocateMemory(vkm.vkDevice, &indexBufferMemoryAllocateInfo, nullptr, &indexBufferMemory);
-    if (vkResult != VK_SUCCESS)
+    if (!VkmCreateBuffer(indexBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &vkm.indexBuffer, &indexBufferMemory))
     {
-        OutputDebugString("Could not allocate memory for vertex buffer");
+        OutputDebugString("Could not create index staging buffer\n.");
         return false;
     }
-
-    vkBindBufferMemory(vkm.vkDevice, vkm.indexBuffer, indexBufferMemory, 0);
     VkmCopyBuffer(stagingBufferForIndices, vkm.indexBuffer, indexBufferSize);
-
-    ///////////////////
-    ///////////////////
-    
+        
     VkCommandBufferAllocateInfo commandBufferAllocateInfo = {};
     commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     commandBufferAllocateInfo.pNext = nullptr;
