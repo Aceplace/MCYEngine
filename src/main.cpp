@@ -170,7 +170,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
         return 0;
     }
 
-    if (!VkMInitialize())
+    if (!VkmInitialize())
     {
         OutputDebugString("Could not intiialize Vulkan");
         return -1;
@@ -204,7 +204,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
         vkResult = vkAcquireNextImageKHR(vkm.vkDevice, vkm.swapChain, UINT64_MAX, vkm.acquireSemaphores[vkm.currentFrameInFlightIndex], VK_NULL_HANDLE, &imageIndex);
         if (vkResult == VK_ERROR_OUT_OF_DATE_KHR)
         {
-            VkMRecreateSwapChain();
+            VkmRecreateSwapChain();
             continue;
         }
         vkResetFences(vkm.vkDevice, 1, &vkm.frameFences[vkm.currentFrameInFlightIndex]);
@@ -248,7 +248,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
         if (vkResult == VK_SUBOPTIMAL_KHR || vkResult == VK_ERROR_OUT_OF_DATE_KHR || vkm.framebufferResized)
         {
             vkm.framebufferResized = false;
-            VkMRecreateSwapChain();
+            VkmRecreateSwapChain();
         }
         else
         {
@@ -261,7 +261,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
 
         vkm.currentFrameInFlightIndex = (vkm.currentFrameInFlightIndex + 1) % MAX_FRAMES_IN_FLIGHT;
     }   
-    VkMCleanUp();
+    VkmCleanUp();
     OutputDebugString("Cleaned up Vulkan");
 
     return 0;
