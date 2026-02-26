@@ -1,6 +1,7 @@
 #include "mcy_helpers.h"
 #include "vulkan_layer.cpp"
 
+
 void RecordCommandBuffer(VkCommandBuffer commandBuffer, u32 imageIndex)
 {
     VkCommandBufferBeginInfo commandBufferBeginInfo = {};
@@ -21,7 +22,7 @@ void RecordCommandBuffer(VkCommandBuffer commandBuffer, u32 imageIndex)
     barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.image = swapChainImages[imageIndex];
+    barrier.image = vkm.swapChainImages[imageIndex];
     VkImageSubresourceRange imageSubresourceName = {};
     imageSubresourceName.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     imageSubresourceName.baseMipLevel = 0;
@@ -50,7 +51,7 @@ void RecordCommandBuffer(VkCommandBuffer commandBuffer, u32 imageIndex)
     VkRenderingAttachmentInfo attachmentInfo = {};
     attachmentInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
     attachmentInfo.pNext = nullptr;
-    attachmentInfo.imageView = swapChainImageViews[imageIndex];
+    attachmentInfo.imageView = vkm.swapChainImageViews[imageIndex];
     attachmentInfo.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     attachmentInfo.resolveMode = VK_RESOLVE_MODE_NONE;
     attachmentInfo.resolveImageView = VK_NULL_HANDLE;
@@ -66,7 +67,7 @@ void RecordCommandBuffer(VkCommandBuffer commandBuffer, u32 imageIndex)
     VkRect2D renderArea = {};
     renderArea.offset.x = 0;
     renderArea.offset.y = 0;
-    renderArea.extent = swapChainExtent;
+    renderArea.extent = vkm.swapChainExtent;
     renderingInfo.renderArea = renderArea;
     renderingInfo.layerCount = 1;
     renderingInfo.viewMask = 0;
@@ -76,13 +77,13 @@ void RecordCommandBuffer(VkCommandBuffer commandBuffer, u32 imageIndex)
     renderingInfo.pStencilAttachment = nullptr;
 
     vkCmdBeginRendering(commandBuffer, &renderingInfo);
-    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vkm.graphicsPipeline);
     
     VkViewport viewport = {};
     viewport.x = 0;
     viewport.y = 0;
-    viewport.width = swapChainExtent.width;
-    viewport.height = swapChainExtent.height;
+    viewport.width = vkm.swapChainExtent.width;
+    viewport.height = vkm.swapChainExtent.height;
     viewport.minDepth = 0;
     viewport.maxDepth = 1;
     vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
@@ -90,12 +91,12 @@ void RecordCommandBuffer(VkCommandBuffer commandBuffer, u32 imageIndex)
     VkRect2D scissorRect = {};
     scissorRect.offset.x = 0;
     scissorRect.offset.y = 0;
-    scissorRect.extent = swapChainExtent;
+    scissorRect.extent = vkm.swapChainExtent;
     vkCmdSetScissor(commandBuffer, 0, 1, &scissorRect);
 
     VkDeviceSize offset = 0;
-    vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer, &offset);
-    vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT16);
+    vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vkm.vertexBuffer, &offset);
+    vkCmdBindIndexBuffer(commandBuffer, vkm.indexBuffer, 0, VK_INDEX_TYPE_UINT16);
     vkCmdDrawIndexed(commandBuffer, sizeof(indices), 1, 0, 0, 0);
 
     vkCmdEndRendering(commandBuffer);
@@ -110,7 +111,7 @@ void RecordCommandBuffer(VkCommandBuffer commandBuffer, u32 imageIndex)
     barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
     barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.image = swapChainImages[imageIndex];
+    barrier.image = vkm.swapChainImages[imageIndex];
     imageSubresourceName = {};
     imageSubresourceName.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     imageSubresourceName.baseMipLevel = 0;
@@ -169,7 +170,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
         return 0;
     }
 
-    if (!VulkanInitialize())
+    if (!VkMInitialize())
     {
         OutputDebugString("Could not intiialize Vulkan");
         return -1;
@@ -193,20 +194,20 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
 
         if (!running) break;
 
-        VkResult vkResult = vkWaitForFences(vkDevice, 1, &frameFences[currentFrameInFlightIndex], VK_TRUE, UINT64_MAX);
+        VkResult vkResult = vkWaitForFences(vkm.vkDevice, 1, &vkm.frameFences[vkm.currentFrameInFlightIndex], VK_TRUE, UINT64_MAX);
         if (vkResult != VK_SUCCESS)
         {
             OutputDebugString("Failed to wait for fetch");
         }
         
         u32 imageIndex;
-        vkResult = vkAcquireNextImageKHR(vkDevice, swapChain, UINT64_MAX, acquireSemaphores[currentFrameInFlightIndex], VK_NULL_HANDLE, &imageIndex);
+        vkResult = vkAcquireNextImageKHR(vkm.vkDevice, vkm.swapChain, UINT64_MAX, vkm.acquireSemaphores[vkm.currentFrameInFlightIndex], VK_NULL_HANDLE, &imageIndex);
         if (vkResult == VK_ERROR_OUT_OF_DATE_KHR)
         {
-            RecreateSwapChain();
+            VkMRecreateSwapChain();
             continue;
         }
-        vkResetFences(vkDevice, 1, &frameFences[currentFrameInFlightIndex]);
+        vkResetFences(vkm.vkDevice, 1, &vkm.frameFences[vkm.currentFrameInFlightIndex]);
         
         if (vkResult != VK_SUCCESS && vkResult != VK_SUBOPTIMAL_KHR)
         {
@@ -215,39 +216,39 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
             OutputDebugString("Failed to acquire swap chain image!");
             return -1;
         }
-        vkResetCommandBuffer(commandBuffers[currentFrameInFlightIndex], 0);
-        RecordCommandBuffer(commandBuffers[currentFrameInFlightIndex], imageIndex);
+        vkResetCommandBuffer(vkm.commandBuffers[vkm.currentFrameInFlightIndex], 0);
+        RecordCommandBuffer(vkm.commandBuffers[vkm.currentFrameInFlightIndex], imageIndex);
 
-        VkSemaphore submitSemaphore = submitSemaphores[imageIndex];
+        VkSemaphore submitSemaphore = vkm.submitSemaphores[imageIndex];
 
         VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
         VkSubmitInfo submitInfo = {};
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
         submitInfo.pNext = nullptr;
         submitInfo.waitSemaphoreCount = 1;
-        submitInfo.pWaitSemaphores = &acquireSemaphores[currentFrameInFlightIndex];
+        submitInfo.pWaitSemaphores = &vkm.acquireSemaphores[vkm.currentFrameInFlightIndex];
         submitInfo.pWaitDstStageMask = waitStages;
         submitInfo.commandBufferCount = 1;
-        submitInfo.pCommandBuffers = &commandBuffers[currentFrameInFlightIndex];
+        submitInfo.pCommandBuffers = &vkm.commandBuffers[vkm.currentFrameInFlightIndex];
         submitInfo.signalSemaphoreCount = 1;
         submitInfo.pSignalSemaphores = &submitSemaphore;
-        vkQueueSubmit(graphicsQueue, 1, &submitInfo, frameFences[currentFrameInFlightIndex]);
+        vkQueueSubmit(vkm.graphicsQueue, 1, &submitInfo, vkm.frameFences[vkm.currentFrameInFlightIndex]);
 
         VkPresentInfoKHR presentInfo = {};
         presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
         presentInfo.pNext = nullptr;
         presentInfo.waitSemaphoreCount = 1;
         presentInfo.pWaitSemaphores = &submitSemaphore;
-        VkSwapchainKHR swapChains[] = {swapChain};
+        VkSwapchainKHR swapChains[] = {vkm.swapChain};
         presentInfo.swapchainCount = 1;
         presentInfo.pSwapchains = swapChains;
         presentInfo.pImageIndices = &imageIndex;
         presentInfo.pResults = nullptr;
-        vkResult = vkQueuePresentKHR(presentQueue, &presentInfo);
-        if (vkResult == VK_SUBOPTIMAL_KHR || vkResult == VK_ERROR_OUT_OF_DATE_KHR || framebufferResized)
+        vkResult = vkQueuePresentKHR(vkm.presentQueue, &presentInfo);
+        if (vkResult == VK_SUBOPTIMAL_KHR || vkResult == VK_ERROR_OUT_OF_DATE_KHR || vkm.framebufferResized)
         {
-            framebufferResized = false;
-            RecreateSwapChain();
+            vkm.framebufferResized = false;
+            VkMRecreateSwapChain();
         }
         else
         {
@@ -258,9 +259,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
             }
         }
 
-        currentFrameInFlightIndex = (currentFrameInFlightIndex + 1) % MAX_FRAMES_IN_FLIGHT;
+        vkm.currentFrameInFlightIndex = (vkm.currentFrameInFlightIndex + 1) % MAX_FRAMES_IN_FLIGHT;
     }   
-    VulkanCleanUp();
+    VkMCleanUp();
     OutputDebugString("Cleaned up Vulkan");
 
     return 0;
@@ -275,7 +276,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         return 0;
 
     case WM_SIZE:
-        framebufferResized = true;
+        vkm.framebufferResized = true;
         break;
 
     case WM_PAINT:
