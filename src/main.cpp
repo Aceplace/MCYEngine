@@ -7,8 +7,36 @@ const u16 indices[] = {
         0, 1, 2, 2, 3, 0
     };
 
-void RecordCommandBuffer(VkCommandBuffer commandBuffer, u32 imageIndex)
+VkCommandBuffer VkmGetInFlightCommandBuffer()
 {
+    return vkm.commandBuffers[vkm.currentFrameInFlightIndex];
+}
+
+bool SetupForFrameRendering(VkCommandBuffer commandBuffer)
+{
+    VkResult vkResult = vkWaitForFences(vkm.vkDevice, 1, &vkm.frameFences[vkm.currentFrameInFlightIndex], VK_TRUE, UINT64_MAX);
+    if (vkResult != VK_SUCCESS)
+    {
+        OutputDebugString("Failed to wait for fetch");
+    }
+    
+    vkResult = vkAcquireNextImageKHR(vkm.vkDevice, vkm.swapChain, UINT64_MAX, vkm.acquireSemaphores[vkm.currentFrameInFlightIndex], VK_NULL_HANDLE, &vkm.imageIndex);
+    if (vkResult == VK_ERROR_OUT_OF_DATE_KHR)
+    {
+        VkmRecreateSwapChain();
+        return true;
+    }
+    vkResetFences(vkm.vkDevice, 1, &vkm.frameFences[vkm.currentFrameInFlightIndex]);
+    
+    if (vkResult != VK_SUCCESS && vkResult != VK_SUBOPTIMAL_KHR)
+    {
+        if (vkResult != VK_TIMEOUT && vkResult != VK_NOT_READY)
+            OutputDebugString("Unexpected return value from acquire image");
+        OutputDebugString("Failed to acquire swap chain image!");
+        return false;
+    }
+    vkResetCommandBuffer(vkm.commandBuffers[vkm.currentFrameInFlightIndex], 0);
+
     VkCommandBufferBeginInfo commandBufferBeginInfo = {};
     commandBufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     commandBufferBeginInfo.pNext = nullptr;
@@ -27,7 +55,7 @@ void RecordCommandBuffer(VkCommandBuffer commandBuffer, u32 imageIndex)
     barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.image = vkm.swapChainImages[imageIndex];
+    barrier.image = vkm.swapChainImages[vkm.imageIndex];
     VkImageSubresourceRange imageSubresourceName = {};
     imageSubresourceName.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     imageSubresourceName.baseMipLevel = 0;
@@ -56,7 +84,7 @@ void RecordCommandBuffer(VkCommandBuffer commandBuffer, u32 imageIndex)
     VkRenderingAttachmentInfo attachmentInfo = {};
     attachmentInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
     attachmentInfo.pNext = nullptr;
-    attachmentInfo.imageView = vkm.swapChainImageViews[imageIndex];
+    attachmentInfo.imageView = vkm.swapChainImageViews[vkm.imageIndex];
     attachmentInfo.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     attachmentInfo.resolveMode = VK_RESOLVE_MODE_NONE;
     attachmentInfo.resolveImageView = VK_NULL_HANDLE;
@@ -99,13 +127,13 @@ void RecordCommandBuffer(VkCommandBuffer commandBuffer, u32 imageIndex)
     scissorRect.extent = vkm.swapChainExtent;
     vkCmdSetScissor(commandBuffer, 0, 1, &scissorRect);
 
-    VkDeviceSize offset = 0;
-    vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer, &offset);
-    vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT16);
-    vkCmdDrawIndexed(commandBuffer, ARRAY_COUNT(indices), 1, 0, 0, 0);
+    return true;
+}
 
+bool EndRenderingAndSetupForPresent(VkCommandBuffer commandBuffer)
+{
     vkCmdEndRendering(commandBuffer);
-    barrier = {};
+    VkImageMemoryBarrier2 barrier = {};
     barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
     barrier.pNext = nullptr;
     barrier.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT_KHR;
@@ -116,8 +144,8 @@ void RecordCommandBuffer(VkCommandBuffer commandBuffer, u32 imageIndex)
     barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
     barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.image = vkm.swapChainImages[imageIndex];
-    imageSubresourceName = {};
+    barrier.image = vkm.swapChainImages[vkm.imageIndex];
+    VkImageSubresourceRange imageSubresourceName = {};
     imageSubresourceName.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     imageSubresourceName.baseMipLevel = 0;
     imageSubresourceName.levelCount = 1;
@@ -125,7 +153,7 @@ void RecordCommandBuffer(VkCommandBuffer commandBuffer, u32 imageIndex)
     imageSubresourceName.layerCount = 1;
     barrier.subresourceRange = imageSubresourceName;
 
-    dependencyInfo = {};
+    VkDependencyInfo dependencyInfo = {};
     dependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
     dependencyInfo.pNext = nullptr;
     dependencyInfo.dependencyFlags = 0;
@@ -137,10 +165,51 @@ void RecordCommandBuffer(VkCommandBuffer commandBuffer, u32 imageIndex)
     dependencyInfo.pImageMemoryBarriers = &barrier;
     vkCmdPipelineBarrier2(commandBuffer, &dependencyInfo);
     vkEndCommandBuffer(commandBuffer);
+
+    VkSemaphore submitSemaphore = vkm.submitSemaphores[vkm.imageIndex];
+
+    VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+    VkSubmitInfo submitInfo = {};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.pNext = nullptr;
+    submitInfo.waitSemaphoreCount = 1;
+    submitInfo.pWaitSemaphores = &vkm.acquireSemaphores[vkm.currentFrameInFlightIndex];
+    submitInfo.pWaitDstStageMask = waitStages;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &vkm.commandBuffers[vkm.currentFrameInFlightIndex];
+    submitInfo.signalSemaphoreCount = 1;
+    submitInfo.pSignalSemaphores = &submitSemaphore;
+    vkQueueSubmit(vkm.graphicsQueue, 1, &submitInfo, vkm.frameFences[vkm.currentFrameInFlightIndex]);
+
+    VkPresentInfoKHR presentInfo = {};
+    presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+    presentInfo.pNext = nullptr;
+    presentInfo.waitSemaphoreCount = 1;
+    presentInfo.pWaitSemaphores = &submitSemaphore;
+    VkSwapchainKHR swapChains[] = {vkm.swapChain};
+    presentInfo.swapchainCount = 1;
+    presentInfo.pSwapchains = swapChains;
+    presentInfo.pImageIndices = &vkm.imageIndex;
+    presentInfo.pResults = nullptr;
+    VkResult vkResult = vkQueuePresentKHR(vkm.presentQueue, &presentInfo);
+    if (vkResult == VK_SUBOPTIMAL_KHR || vkResult == VK_ERROR_OUT_OF_DATE_KHR || vkm.framebufferResized)
+    {
+        vkm.framebufferResized = false;
+        VkmRecreateSwapChain();
+    }
+    else
+    {
+        if (vkResult != VK_SUCCESS)
+        {
+            OutputDebugString("Unexpected return value from queue present");
+            return false;
+        }
+    }
+
+    vkm.currentFrameInFlightIndex = (vkm.currentFrameInFlightIndex + 1) % MAX_FRAMES_IN_FLIGHT;
+    return true;
 }
 
-
-    
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine, int nCmdShow)
 {
@@ -240,73 +309,25 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
         }
 
         if (!running) break;
-
-        VkResult vkResult = vkWaitForFences(vkm.vkDevice, 1, &vkm.frameFences[vkm.currentFrameInFlightIndex], VK_TRUE, UINT64_MAX);
-        if (vkResult != VK_SUCCESS)
-        {
-            OutputDebugString("Failed to wait for fetch");
-        }
         
-        u32 imageIndex;
-        vkResult = vkAcquireNextImageKHR(vkm.vkDevice, vkm.swapChain, UINT64_MAX, vkm.acquireSemaphores[vkm.currentFrameInFlightIndex], VK_NULL_HANDLE, &imageIndex);
-        if (vkResult == VK_ERROR_OUT_OF_DATE_KHR)
+        // u32 imageIndex;
+        if (!SetupForFrameRendering(vkm.commandBuffers[vkm.currentFrameInFlightIndex]))
         {
-            VkmRecreateSwapChain();
-            continue;
+            OutputDebugString("Could not set up frame for rendering.");
+            break;
         }
-        vkResetFences(vkm.vkDevice, 1, &vkm.frameFences[vkm.currentFrameInFlightIndex]);
-        
-        if (vkResult != VK_SUCCESS && vkResult != VK_SUBOPTIMAL_KHR)
+        VkCommandBuffer commandBuffer = VkmGetInFlightCommandBuffer();
+
+        VkDeviceSize offset = 0;
+        vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer, &offset);
+        vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT16);
+        vkCmdDrawIndexed(commandBuffer, ARRAY_COUNT(indices), 1, 0, 0, 0);
+
+        if (!EndRenderingAndSetupForPresent(vkm.commandBuffers[vkm.currentFrameInFlightIndex]))
         {
-            if (vkResult != VK_TIMEOUT && vkResult != VK_NOT_READY)
-                OutputDebugString("Unexpected return value from acquire image");
-            OutputDebugString("Failed to acquire swap chain image!");
-            return -1;
+            OutputDebugString("Could not set up frame for rendering.");
+            break;
         }
-        vkResetCommandBuffer(vkm.commandBuffers[vkm.currentFrameInFlightIndex], 0);
-        RecordCommandBuffer(vkm.commandBuffers[vkm.currentFrameInFlightIndex], imageIndex);
-
-        VkSemaphore submitSemaphore = vkm.submitSemaphores[imageIndex];
-
-        VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-        VkSubmitInfo submitInfo = {};
-        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-        submitInfo.pNext = nullptr;
-        submitInfo.waitSemaphoreCount = 1;
-        submitInfo.pWaitSemaphores = &vkm.acquireSemaphores[vkm.currentFrameInFlightIndex];
-        submitInfo.pWaitDstStageMask = waitStages;
-        submitInfo.commandBufferCount = 1;
-        submitInfo.pCommandBuffers = &vkm.commandBuffers[vkm.currentFrameInFlightIndex];
-        submitInfo.signalSemaphoreCount = 1;
-        submitInfo.pSignalSemaphores = &submitSemaphore;
-        vkQueueSubmit(vkm.graphicsQueue, 1, &submitInfo, vkm.frameFences[vkm.currentFrameInFlightIndex]);
-
-        VkPresentInfoKHR presentInfo = {};
-        presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-        presentInfo.pNext = nullptr;
-        presentInfo.waitSemaphoreCount = 1;
-        presentInfo.pWaitSemaphores = &submitSemaphore;
-        VkSwapchainKHR swapChains[] = {vkm.swapChain};
-        presentInfo.swapchainCount = 1;
-        presentInfo.pSwapchains = swapChains;
-        presentInfo.pImageIndices = &imageIndex;
-        presentInfo.pResults = nullptr;
-        vkResult = vkQueuePresentKHR(vkm.presentQueue, &presentInfo);
-        if (vkResult == VK_SUBOPTIMAL_KHR || vkResult == VK_ERROR_OUT_OF_DATE_KHR || vkm.framebufferResized)
-        {
-            vkm.framebufferResized = false;
-            VkmRecreateSwapChain();
-        }
-        else
-        {
-            if (vkResult != VK_SUCCESS)
-            {
-                OutputDebugString("Unexpected return value from queue present");
-                return -1;
-            }
-        }
-
-        vkm.currentFrameInFlightIndex = (vkm.currentFrameInFlightIndex + 1) % MAX_FRAMES_IN_FLIGHT;
     }   
     VkmCleanUp();
     OutputDebugString("Cleaned up Vulkan");
