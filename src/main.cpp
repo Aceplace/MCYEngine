@@ -1,6 +1,11 @@
 #include "mcy_helpers.h"
 #include "vulkan_layer.cpp"
 
+VkBuffer vertexBuffer = VK_NULL_HANDLE;
+VkBuffer indexBuffer = VK_NULL_HANDLE;
+const u16 indices[] = {
+        0, 1, 2, 2, 3, 0
+    };
 
 void RecordCommandBuffer(VkCommandBuffer commandBuffer, u32 imageIndex)
 {
@@ -95,8 +100,8 @@ void RecordCommandBuffer(VkCommandBuffer commandBuffer, u32 imageIndex)
     vkCmdSetScissor(commandBuffer, 0, 1, &scissorRect);
 
     VkDeviceSize offset = 0;
-    vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vkm.vertexBuffer, &offset);
-    vkCmdBindIndexBuffer(commandBuffer, vkm.indexBuffer, 0, VK_INDEX_TYPE_UINT16);
+    vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer, &offset);
+    vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT16);
     vkCmdDrawIndexed(commandBuffer, ARRAY_COUNT(indices), 1, 0, 0, 0);
 
     vkCmdEndRendering(commandBuffer);
@@ -175,6 +180,48 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
         OutputDebugString("Could not intiialize Vulkan");
         return -1;
     }
+
+    const Vertex vertices[] = {
+        {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+        {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
+        {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
+        {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
+    };
+
+    VkDeviceSize vertexBufferSize = sizeof(vertices);
+    VkBuffer stagingBufferForVertices = VK_NULL_HANDLE;
+    VkDeviceMemory stagingBufferForVerticesMemory = VK_NULL_HANDLE;
+    if (!VkmCreateAndFillBuffer(vertexBufferSize, (void*)vertices, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingBufferForVertices, &stagingBufferForVerticesMemory))
+    {
+        OutputDebugString("Could not create vertex staging buffer\n.");
+        return false;
+    }
+    
+    VkDeviceMemory vertexBufferForVerticesMemory = VK_NULL_HANDLE;
+    if (!VkmCreateBuffer(vertexBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &vertexBuffer, &vertexBufferForVerticesMemory))
+    {
+        OutputDebugString("Could not create vertex staging buffer\n.");
+        return false;
+    }
+    VkmCopyBuffer(stagingBufferForVertices, vertexBuffer, vertexBufferSize);
+    
+    VkDeviceSize indexBufferSize = sizeof(indices);
+    VkBuffer stagingBufferForIndices = VK_NULL_HANDLE;
+    VkDeviceMemory stagingBufferForIndicesMemory = VK_NULL_HANDLE;
+    if (!VkmCreateAndFillBuffer(indexBufferSize, (void*)indices, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingBufferForIndices, &stagingBufferForIndicesMemory))
+    {
+        OutputDebugString("Could not create index staging buffer\n.");
+        return false;
+    }
+    
+    VkDeviceMemory indexBufferMemory = VK_NULL_HANDLE;
+    if (!VkmCreateBuffer(indexBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &indexBuffer, &indexBufferMemory))
+    {
+        OutputDebugString("Could not create index staging buffer\n.");
+        return false;
+    }
+    VkmCopyBuffer(stagingBufferForIndices, indexBuffer, indexBufferSize);
+
 
     ShowWindow(_hwnd, nCmdShow);        
     MSG msg = { };

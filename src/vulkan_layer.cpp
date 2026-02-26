@@ -12,17 +12,6 @@ struct Vertex
 
 };
 
-const Vertex vertices[] = {
-    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-    {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
-    {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
-    {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
-};
-
-const u16 indices[] = {
-    0, 1, 2, 2, 3, 0
-};
-
 VkVertexInputBindingDescription VertexGetBindingDescription()
 {
     VkVertexInputBindingDescription result = {};
@@ -80,7 +69,7 @@ struct VKMState
     
     VkPipeline graphicsPipeline;
     VkShaderModule shaderModule;
-    VkBuffer vertexBuffer;
+    // VkBuffer vertexBuffer;
     
     VkCommandPool commandPool;
     VkCommandBuffer commandBuffers[MAX_FRAMES_IN_FLIGHT];
@@ -94,8 +83,8 @@ struct VKMState
     VkFence frameFences[MAX_FRAMES_IN_FLIGHT];
     VkSemaphore* submitSemaphores;
     u32 currentFrameInFlightIndex;
-    VkBuffer indexBuffer;
-    VkBuffer indexBufferBuffer;
+    // VkBuffer indexBuffer;
+    // VkBuffer indexBufferBuffer;
 };
 VKMState vkm = {};
 
@@ -717,39 +706,39 @@ bool VkmInitialize()
         return false;
     }
 
-    VkDeviceSize vertexBufferSize = sizeof(vertices);
-    VkBuffer stagingBufferForVertices = VK_NULL_HANDLE;
-    VkDeviceMemory stagingBufferForVerticesMemory = VK_NULL_HANDLE;
-    if (!VkmCreateAndFillBuffer(vertexBufferSize, (void*)vertices, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingBufferForVertices, &stagingBufferForVerticesMemory))
-    {
-        OutputDebugString("Could not create vertex staging buffer\n.");
-        return false;
-    }
+    // VkDeviceSize vertexBufferSize = sizeof(vertices);
+    // VkBuffer stagingBufferForVertices = VK_NULL_HANDLE;
+    // VkDeviceMemory stagingBufferForVerticesMemory = VK_NULL_HANDLE;
+    // if (!VkmCreateAndFillBuffer(vertexBufferSize, (void*)vertices, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingBufferForVertices, &stagingBufferForVerticesMemory))
+    // {
+    //     OutputDebugString("Could not create vertex staging buffer\n.");
+    //     return false;
+    // }
     
-    VkDeviceMemory vertexBufferForVerticesMemory = VK_NULL_HANDLE;
-    if (!VkmCreateBuffer(vertexBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &vkm.vertexBuffer, &vertexBufferForVerticesMemory))
-    {
-        OutputDebugString("Could not create vertex staging buffer\n.");
-        return false;
-    }
-    VkmCopyBuffer(stagingBufferForVertices, vkm.vertexBuffer, vertexBufferSize);
+    // VkDeviceMemory vertexBufferForVerticesMemory = VK_NULL_HANDLE;
+    // if (!VkmCreateBuffer(vertexBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &vkm.vertexBuffer, &vertexBufferForVerticesMemory))
+    // {
+    //     OutputDebugString("Could not create vertex staging buffer\n.");
+    //     return false;
+    // }
+    // VkmCopyBuffer(stagingBufferForVertices, vkm.vertexBuffer, vertexBufferSize);
     
-    VkDeviceSize indexBufferSize = sizeof(indices);
-    VkBuffer stagingBufferForIndices = VK_NULL_HANDLE;
-    VkDeviceMemory stagingBufferForIndicesMemory = VK_NULL_HANDLE;
-    if (!VkmCreateAndFillBuffer(indexBufferSize, (void*)indices, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingBufferForIndices, &stagingBufferForIndicesMemory))
-    {
-        OutputDebugString("Could not create index staging buffer\n.");
-        return false;
-    }
+    // VkDeviceSize indexBufferSize = sizeof(indices);
+    // VkBuffer stagingBufferForIndices = VK_NULL_HANDLE;
+    // VkDeviceMemory stagingBufferForIndicesMemory = VK_NULL_HANDLE;
+    // if (!VkmCreateAndFillBuffer(indexBufferSize, (void*)indices, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingBufferForIndices, &stagingBufferForIndicesMemory))
+    // {
+    //     OutputDebugString("Could not create index staging buffer\n.");
+    //     return false;
+    // }
     
-    VkDeviceMemory indexBufferMemory = VK_NULL_HANDLE;
-    if (!VkmCreateBuffer(indexBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &vkm.indexBuffer, &indexBufferMemory))
-    {
-        OutputDebugString("Could not create index staging buffer\n.");
-        return false;
-    }
-    VkmCopyBuffer(stagingBufferForIndices, vkm.indexBuffer, indexBufferSize);
+    // VkDeviceMemory indexBufferMemory = VK_NULL_HANDLE;
+    // if (!VkmCreateBuffer(indexBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &vkm.indexBuffer, &indexBufferMemory))
+    // {
+    //     OutputDebugString("Could not create index staging buffer\n.");
+    //     return false;
+    // }
+    // VkmCopyBuffer(stagingBufferForIndices, vkm.indexBuffer, indexBufferSize);
         
     VkCommandBufferAllocateInfo commandBufferAllocateInfo = {};
     commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
