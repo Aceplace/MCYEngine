@@ -1,215 +1,6 @@
 #include "mcy_helpers.h"
 #include "vulkan_layer.cpp"
 
-VkBuffer vertexBuffer = VK_NULL_HANDLE;
-VkBuffer indexBuffer = VK_NULL_HANDLE;
-const u16 indices[] = {
-        0, 1, 2, 2, 3, 0
-    };
-
-VkCommandBuffer VkmGetInFlightCommandBuffer()
-{
-    return vkm.commandBuffers[vkm.currentFrameInFlightIndex];
-}
-
-bool SetupForFrameRendering(VkCommandBuffer commandBuffer)
-{
-    VkResult vkResult = vkWaitForFences(vkm.vkDevice, 1, &vkm.frameFences[vkm.currentFrameInFlightIndex], VK_TRUE, UINT64_MAX);
-    if (vkResult != VK_SUCCESS)
-    {
-        OutputDebugString("Failed to wait for fetch");
-    }
-    
-    vkResult = vkAcquireNextImageKHR(vkm.vkDevice, vkm.swapChain, UINT64_MAX, vkm.acquireSemaphores[vkm.currentFrameInFlightIndex], VK_NULL_HANDLE, &vkm.imageIndex);
-    if (vkResult == VK_ERROR_OUT_OF_DATE_KHR)
-    {
-        VkmRecreateSwapChain();
-        return true;
-    }
-    vkResetFences(vkm.vkDevice, 1, &vkm.frameFences[vkm.currentFrameInFlightIndex]);
-    
-    if (vkResult != VK_SUCCESS && vkResult != VK_SUBOPTIMAL_KHR)
-    {
-        if (vkResult != VK_TIMEOUT && vkResult != VK_NOT_READY)
-            OutputDebugString("Unexpected return value from acquire image");
-        OutputDebugString("Failed to acquire swap chain image!");
-        return false;
-    }
-    vkResetCommandBuffer(vkm.commandBuffers[vkm.currentFrameInFlightIndex], 0);
-
-    VkCommandBufferBeginInfo commandBufferBeginInfo = {};
-    commandBufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    commandBufferBeginInfo.pNext = nullptr;
-    commandBufferBeginInfo.flags = 0;
-    commandBufferBeginInfo.pInheritanceInfo = nullptr;
-    vkBeginCommandBuffer(commandBuffer, &commandBufferBeginInfo);
-
-    VkImageMemoryBarrier2 barrier = {};
-    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-    barrier.pNext = nullptr;
-    barrier.srcAccessMask = 0;
-    barrier.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT_KHR;
-    barrier.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-    barrier.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-    barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.image = vkm.swapChainImages[vkm.imageIndex];
-    VkImageSubresourceRange imageSubresourceName = {};
-    imageSubresourceName.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    imageSubresourceName.baseMipLevel = 0;
-    imageSubresourceName.levelCount = 1;
-    imageSubresourceName.baseArrayLayer = 0;
-    imageSubresourceName.layerCount = 1;
-    barrier.subresourceRange = imageSubresourceName;
-
-    VkDependencyInfo dependencyInfo = {};
-    dependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
-    dependencyInfo.pNext = nullptr;
-    dependencyInfo.dependencyFlags = 0;
-    dependencyInfo.memoryBarrierCount = 0;
-    dependencyInfo.pMemoryBarriers = nullptr;
-    dependencyInfo.bufferMemoryBarrierCount = 0;
-    dependencyInfo.pBufferMemoryBarriers = nullptr;
-    dependencyInfo.imageMemoryBarrierCount = 1;
-    dependencyInfo.pImageMemoryBarriers = &barrier;
-    vkCmdPipelineBarrier2(commandBuffer, &dependencyInfo);
-
-    VkClearValue clearColor = {};
-    clearColor.color.float32[0] = 0.0f;
-    clearColor.color.float32[1] = 0.0f;
-    clearColor.color.float32[2] = 0.0f;
-    clearColor.color.float32[3] = 1.0f;
-    VkRenderingAttachmentInfo attachmentInfo = {};
-    attachmentInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-    attachmentInfo.pNext = nullptr;
-    attachmentInfo.imageView = vkm.swapChainImageViews[vkm.imageIndex];
-    attachmentInfo.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    attachmentInfo.resolveMode = VK_RESOLVE_MODE_NONE;
-    attachmentInfo.resolveImageView = VK_NULL_HANDLE;
-    attachmentInfo.resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    attachmentInfo.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    attachmentInfo.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    attachmentInfo.clearValue = clearColor;    
-
-    VkRenderingInfo renderingInfo = {};
-    renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
-    renderingInfo.pNext = nullptr;
-    renderingInfo.flags = 0;
-    VkRect2D renderArea = {};
-    renderArea.offset.x = 0;
-    renderArea.offset.y = 0;
-    renderArea.extent = vkm.swapChainExtent;
-    renderingInfo.renderArea = renderArea;
-    renderingInfo.layerCount = 1;
-    renderingInfo.viewMask = 0;
-    renderingInfo.colorAttachmentCount = 1;
-    renderingInfo.pColorAttachments = &attachmentInfo;
-    renderingInfo.pDepthAttachment = nullptr;
-    renderingInfo.pStencilAttachment = nullptr;
-
-    vkCmdBeginRendering(commandBuffer, &renderingInfo);
-    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vkm.graphicsPipeline);
-    
-    VkViewport viewport = {};
-    viewport.x = 0;
-    viewport.y = 0;
-    viewport.width = vkm.swapChainExtent.width;
-    viewport.height = vkm.swapChainExtent.height;
-    viewport.minDepth = 0;
-    viewport.maxDepth = 1;
-    vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
-    
-    VkRect2D scissorRect = {};
-    scissorRect.offset.x = 0;
-    scissorRect.offset.y = 0;
-    scissorRect.extent = vkm.swapChainExtent;
-    vkCmdSetScissor(commandBuffer, 0, 1, &scissorRect);
-
-    return true;
-}
-
-bool EndRenderingAndSetupForPresent(VkCommandBuffer commandBuffer)
-{
-    vkCmdEndRendering(commandBuffer);
-    VkImageMemoryBarrier2 barrier = {};
-    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-    barrier.pNext = nullptr;
-    barrier.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT_KHR;
-    barrier.dstAccessMask = 0;
-    barrier.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-    barrier.dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
-    barrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.image = vkm.swapChainImages[vkm.imageIndex];
-    VkImageSubresourceRange imageSubresourceName = {};
-    imageSubresourceName.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    imageSubresourceName.baseMipLevel = 0;
-    imageSubresourceName.levelCount = 1;
-    imageSubresourceName.baseArrayLayer = 0;
-    imageSubresourceName.layerCount = 1;
-    barrier.subresourceRange = imageSubresourceName;
-
-    VkDependencyInfo dependencyInfo = {};
-    dependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
-    dependencyInfo.pNext = nullptr;
-    dependencyInfo.dependencyFlags = 0;
-    dependencyInfo.memoryBarrierCount = 0;
-    dependencyInfo.pMemoryBarriers = nullptr;
-    dependencyInfo.bufferMemoryBarrierCount = 0;
-    dependencyInfo.pBufferMemoryBarriers = nullptr;
-    dependencyInfo.imageMemoryBarrierCount = 1;
-    dependencyInfo.pImageMemoryBarriers = &barrier;
-    vkCmdPipelineBarrier2(commandBuffer, &dependencyInfo);
-    vkEndCommandBuffer(commandBuffer);
-
-    VkSemaphore submitSemaphore = vkm.submitSemaphores[vkm.imageIndex];
-
-    VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-    VkSubmitInfo submitInfo = {};
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submitInfo.pNext = nullptr;
-    submitInfo.waitSemaphoreCount = 1;
-    submitInfo.pWaitSemaphores = &vkm.acquireSemaphores[vkm.currentFrameInFlightIndex];
-    submitInfo.pWaitDstStageMask = waitStages;
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &vkm.commandBuffers[vkm.currentFrameInFlightIndex];
-    submitInfo.signalSemaphoreCount = 1;
-    submitInfo.pSignalSemaphores = &submitSemaphore;
-    vkQueueSubmit(vkm.graphicsQueue, 1, &submitInfo, vkm.frameFences[vkm.currentFrameInFlightIndex]);
-
-    VkPresentInfoKHR presentInfo = {};
-    presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-    presentInfo.pNext = nullptr;
-    presentInfo.waitSemaphoreCount = 1;
-    presentInfo.pWaitSemaphores = &submitSemaphore;
-    VkSwapchainKHR swapChains[] = {vkm.swapChain};
-    presentInfo.swapchainCount = 1;
-    presentInfo.pSwapchains = swapChains;
-    presentInfo.pImageIndices = &vkm.imageIndex;
-    presentInfo.pResults = nullptr;
-    VkResult vkResult = vkQueuePresentKHR(vkm.presentQueue, &presentInfo);
-    if (vkResult == VK_SUBOPTIMAL_KHR || vkResult == VK_ERROR_OUT_OF_DATE_KHR || vkm.framebufferResized)
-    {
-        vkm.framebufferResized = false;
-        VkmRecreateSwapChain();
-    }
-    else
-    {
-        if (vkResult != VK_SUCCESS)
-        {
-            OutputDebugString("Unexpected return value from queue present");
-            return false;
-        }
-    }
-
-    vkm.currentFrameInFlightIndex = (vkm.currentFrameInFlightIndex + 1) % MAX_FRAMES_IN_FLIGHT;
-    return true;
-}
-
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine, int nCmdShow)
 {
@@ -256,6 +47,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
         {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
         {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
     };
+
+    const u16 indices[] = {
+        0, 1, 2, 2, 3, 0
+    };
+
+    VkBuffer vertexBuffer = VK_NULL_HANDLE;
+    VkBuffer indexBuffer = VK_NULL_HANDLE;
 
     VkDeviceSize vertexBufferSize = sizeof(vertices);
     VkBuffer stagingBufferForVertices = VK_NULL_HANDLE;
@@ -311,7 +109,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
         if (!running) break;
         
         // u32 imageIndex;
-        if (!SetupForFrameRendering(vkm.commandBuffers[vkm.currentFrameInFlightIndex]))
+        if (!VkmSetupForFrameRendering(vkm.commandBuffers[vkm.currentFrameInFlightIndex]))
         {
             OutputDebugString("Could not set up frame for rendering.");
             break;
@@ -323,7 +121,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
         vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT16);
         vkCmdDrawIndexed(commandBuffer, ARRAY_COUNT(indices), 1, 0, 0, 0);
 
-        if (!EndRenderingAndSetupForPresent(vkm.commandBuffers[vkm.currentFrameInFlightIndex]))
+        if (!VkmEndRenderingAndSetupForPresent(vkm.commandBuffers[vkm.currentFrameInFlightIndex]))
         {
             OutputDebugString("Could not set up frame for rendering.");
             break;
