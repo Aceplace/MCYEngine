@@ -1,5 +1,8 @@
 #include "mcy_helpers.h"
 #include "vulkan_layer.cpp"
+#include <chrono>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine, int nCmdShow)
@@ -107,14 +110,28 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
         }
 
         if (!running) break;
+
+        static std::chrono::steady_clock::time_point startTime = std::chrono::high_resolution_clock::now();
+
+        std::chrono::steady_clock::time_point currentTime = std::chrono::high_resolution_clock::now();
+        float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+
+        UniformBufferObject ubo = {};
+        ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        ubo.proj = glm::perspective(glm::radians(45.0f), static_cast<float>(vkm.swapChainExtent.width) / static_cast<float>(vkm.swapChainExtent.height), 0.1f, 10.0f);
+        ubo.proj[1][1] *= -1;
+        memcpy(vkm.uniformBuffersMapped[vkm.currentFrameInFlightIndex], &ubo, sizeof(ubo));
         
-        // u32 imageIndex;
         if (!VkmSetupForFrameRendering(vkm.commandBuffers[vkm.currentFrameInFlightIndex]))
         {
             OutputDebugString("Could not set up frame for rendering.");
             break;
         }
+        
         VkCommandBuffer commandBuffer = VkmGetInFlightCommandBuffer();
+
+        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vkm.pipelineLayout, 0, 1, &vkm.descriptorSets[vkm.currentFrameInFlightIndex], 0, nullptr); 
 
         VkDeviceSize offset = 0;
         vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer, &offset);

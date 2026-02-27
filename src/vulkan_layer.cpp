@@ -74,9 +74,16 @@ struct VkMState
     VkPresentModeKHR presentMode;
     bool framebufferResized;
     u32 imageIndex;
-    
+
     VkPipeline graphicsPipeline;
     VkShaderModule shaderModule;
+    
+    VkBuffer uniformBuffers[MAX_FRAMES_IN_FLIGHT];
+    VkDeviceMemory uniformBuffersMemory[MAX_FRAMES_IN_FLIGHT];
+    void* uniformBuffersMapped[MAX_FRAMES_IN_FLIGHT];
+    VkDescriptorPool descriptorPool;
+    VkDescriptorSetLayout descriptorSetLayouts[MAX_FRAMES_IN_FLIGHT];
+    VkDescriptorSet descriptorSets[MAX_FRAMES_IN_FLIGHT];
     
     VkCommandPool commandPool;
     VkCommandBuffer commandBuffers[MAX_FRAMES_IN_FLIGHT];
@@ -555,6 +562,10 @@ bool VkmInitialize()
         OutputDebugString("Could not create descriptor set.");
         return false;
     }
+    for (u32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+    {
+        vkm.descriptorSetLayouts[i] = descriptorSetLayout;
+    }
 
     VkPipelineShaderStageCreateInfo vertShaderStageInfo = {};
     vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -626,7 +637,7 @@ bool VkmInitialize()
     pipelineRasterizationStateCreateInfo.rasterizerDiscardEnable = false;
     pipelineRasterizationStateCreateInfo.polygonMode = VK_POLYGON_MODE_FILL;
     pipelineRasterizationStateCreateInfo.cullMode = VK_CULL_MODE_BACK_BIT;
-    pipelineRasterizationStateCreateInfo.frontFace = VK_FRONT_FACE_CLOCKWISE;
+    pipelineRasterizationStateCreateInfo.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     pipelineRasterizationStateCreateInfo.depthBiasEnable = false;
     pipelineRasterizationStateCreateInfo.depthBiasConstantFactor = 0;
     pipelineRasterizationStateCreateInfo.depthBiasClamp = 0;
@@ -671,10 +682,8 @@ bool VkmInitialize()
     pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutCreateInfo.pNext = nullptr;
     pipelineLayoutCreateInfo.flags = 0;
-    pipelineLayoutCreateInfo.setLayoutCount = 0;
-    pipelineLayoutCreateInfo.pSetLayouts = nullptr;
-    // pipelineLayoutCreateInfo.setLayoutCount = 1;
-    // pipelineLayoutCreateInfo.pSetLayouts = &descriptorSetLayout;
+    pipelineLayoutCreateInfo.setLayoutCount = 1;
+    pipelineLayoutCreateInfo.pSetLayouts = &descriptorSetLayout;
     pipelineLayoutCreateInfo.pushConstantRangeCount = 0;
     pipelineLayoutCreateInfo.pPushConstantRanges = nullptr;
     vkResult = vkCreatePipelineLayout(vkm.vkDevice, &pipelineLayoutCreateInfo, nullptr, &vkm.pipelineLayout);
@@ -747,12 +756,73 @@ bool VkmInitialize()
         return false;
     }
 
+    u32 uniformBufferSize = sizeof(UniformBufferObject);
+    for (u32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+    {
+        if (!VkmCreateBuffer(uniformBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                            &vkm.uniformBuffers[i], &vkm.uniformBuffersMemory[i]))
+        {
+            OutputDebugString("Could not create uniform buffer");
+            return false;   
+        }
+
+        VkResult vkResult = vkMapMemory(vkm.vkDevice, vkm.uniformBuffersMemory[i], 0, uniformBufferSize, 0, &vkm.uniformBuffersMapped[i]);
+        if (vkResult != VK_SUCCESS)
+        {
+            OutputDebugString("Could not map staging memory.");
+            return false;
+        }
+    }
+
+    VkDescriptorPoolSize descriptorPoolSize = {};
+    descriptorPoolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    descriptorPoolSize.descriptorCount = MAX_FRAMES_IN_FLIGHT;
+    VkDescriptorPoolCreateInfo descriptorPoolCreateInfo = {};
+    descriptorPoolCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    descriptorPoolCreateInfo.pNext = nullptr;
+    descriptorPoolCreateInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+    descriptorPoolCreateInfo.maxSets = MAX_FRAMES_IN_FLIGHT;
+    descriptorPoolCreateInfo.poolSizeCount = 1;
+    descriptorPoolCreateInfo.pPoolSizes = &descriptorPoolSize;
+    vkCreateDescriptorPool(vkm.vkDevice, &descriptorPoolCreateInfo, nullptr, &vkm.descriptorPool);
+    
+    VkDescriptorSetAllocateInfo descriptorSetAllocateInfo = {};
+    descriptorSetAllocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    descriptorSetAllocateInfo.pNext = nullptr;
+    descriptorSetAllocateInfo.descriptorPool = vkm.descriptorPool;
+    descriptorSetAllocateInfo.descriptorSetCount = ARRAY_COUNT(vkm.descriptorSetLayouts);
+    descriptorSetAllocateInfo.pSetLayouts = vkm.descriptorSetLayouts;
+    vkAllocateDescriptorSets(vkm.vkDevice, &descriptorSetAllocateInfo, vkm.descriptorSets);
+
+    for (u32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) 
+    {
+        VkDescriptorBufferInfo descriptorBufferInfo = {};
+        descriptorBufferInfo.buffer = vkm.uniformBuffers[i];
+        descriptorBufferInfo.offset = 0;
+        descriptorBufferInfo.range = uniformBufferSize;
+
+        VkWriteDescriptorSet writeDescriptorSet = {};
+        writeDescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writeDescriptorSet.pNext = nullptr;
+        writeDescriptorSet.dstSet = vkm.descriptorSets[i];
+        writeDescriptorSet.dstBinding = 0;
+        writeDescriptorSet.dstArrayElement = 0;
+        writeDescriptorSet.descriptorCount = 1;
+        writeDescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        writeDescriptorSet.pImageInfo = nullptr;
+        writeDescriptorSet.pBufferInfo = &descriptorBufferInfo;
+        writeDescriptorSet.pTexelBufferView = nullptr;
+
+        vkUpdateDescriptorSets(vkm.vkDevice, 1, &writeDescriptorSet, 0, nullptr);
+    }
+
     VkSemaphoreCreateInfo semaphoreInfo{};
     semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
     
     VkFenceCreateInfo fenceInfo{};
     fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
     fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+        
     
     for (u32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
     {
