@@ -4,6 +4,8 @@
 #include <vulkan/vulkan.h>
 #include "mcy_helpers.h"
 #include <glm/glm.hpp>
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb/stb_image.h>
 
 struct Vertex
 {
@@ -14,9 +16,9 @@ struct Vertex
 
 struct UniformBufferObject 
 {
-    glm::mat4 model;
-    glm::mat4 view;
-    glm::mat4 proj;
+    alignas(16) glm::mat4 model;
+    alignas(16) glm::mat4 view;
+    alignas(16) glm::mat4 proj;
 };
 
 VkVertexInputBindingDescription VertexGetBindingDescription()
@@ -97,6 +99,9 @@ struct VkMState
     VkFence frameFences[MAX_FRAMES_IN_FLIGHT];
     VkSemaphore* submitSemaphores;
     u32 currentFrameInFlightIndex;
+
+    VkImage textureImage;
+    VkDeviceMemory textureImageMemory;
 };
 VkMState vkm = {};
 
@@ -844,6 +849,7 @@ bool VkmInitialize()
             return false;
         }
     }
+
     return true;
 }
 
@@ -1380,5 +1386,89 @@ bool VkmEndRenderingAndSetupForPresent(VkCommandBuffer commandBuffer)
     }
 
     vkm.currentFrameInFlightIndex = (vkm.currentFrameInFlightIndex + 1) % MAX_FRAMES_IN_FLIGHT;
+    return true;
+}
+
+bool CreateTextureImage()
+{
+    int texWidth, texHeight, texChannels;
+    stbi_uc* pixels = stbi_load("textures/texture.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+    VkDeviceSize imageSize = texWidth * texHeight * 4;
+
+    if (!pixels) 
+    {
+        OutputDebugString("Could not load image");
+        return false;
+    }
+
+    VkBuffer stagingBuffer = VK_NULL_HANDLE;
+    VkDeviceMemory stagingBufferMemory = VK_NULL_HANDLE;
+    VkmCreateAndFillBuffer(imageSize, pixels, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, 
+                    &stagingBuffer, &stagingBufferMemory);
+
+    stbi_image_free(pixels);
+
+    VkImageCreateInfo imageCreateInfo = {};
+    imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    imageCreateInfo.pNext = nullptr;
+    imageCreateInfo.flags = 0;
+    imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
+    imageCreateInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
+    imageCreateInfo.extent.width = texWidth;
+    imageCreateInfo.extent.height = texHeight;
+    imageCreateInfo.extent.depth = 1;
+    imageCreateInfo.mipLevels = 1;
+    imageCreateInfo.arrayLayers = 1;
+    imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+    imageCreateInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+    imageCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    imageCreateInfo.queueFamilyIndexCount = 1;
+    imageCreateInfo.pQueueFamilyIndices = (u32*)&vkm.graphicsQueueIndex;
+    imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+    vkCreateImage(vkm.vkDevice, &imageCreateInfo, nullptr, &vkm.textureImage);
+
+    VkMemoryRequirements memRequirements = {};
+    vkGetImageMemoryRequirements(vkm.vkDevice, vkm.textureImage, &memRequirements);
+    VkMemoryAllocateInfo memoryAllocateInfo = {};
+    memoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    memoryAllocateInfo.pNext = nullptr;
+    memoryAllocateInfo.allocationSize = memRequirements.size;
+    memoryAllocateInfo.memoryTypeIndex = VkmFindMemoryTypeIndex(memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    if (memoryAllocateInfo.memoryTypeIndex == -1)
+    {
+        OutputDebugString("Could not find suitable memory type in physical device\n");
+        return false;
+    }
+    VkResult vkResult = vkAllocateMemory(vkm.vkDevice, &memoryAllocateInfo, nullptr, &vkm.textureImageMemory);
+
+    if (vkResult != VK_SUCCESS)
+    {
+        OutputDebugString("Could not allocate for texture memory\n");
+        return false;
+    }
+    vkBindImageMemory(vkm.vkDevice, vkm.textureImage, vkm.textureImageMemory, 0);
+    
+    return true;
+}
+
+bool VkmBeginSingleTimeCommands()
+{
+    VkCommandBufferAllocateInfo allocInfo = {};
+    allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    allocInfo.pNext = nullptr;
+    allocInfo.commandPool = vkm.commandPool;
+    allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    allocInfo.commandBufferCount = 1;
+
+    VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+    VkResult vkResult = vkAllocateCommandBuffers(vkm.vkDevice, &allocInfo, &commandBuffer);
+    if (vkResult != VK_SUCCESS)
+    {
+        OutputDebugString("Could not allocate for command buffer\n");
+        return false;
+    }
+
     return true;
 }

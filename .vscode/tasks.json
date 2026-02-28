@@ -16,7 +16,7 @@
                 "/Fe${workspaceFolder}\\mcy_engine.exe",
                 "${workspaceFolder}\\src\\main.cpp",
                 "/I%VULKAN_SDK%\\Include",
-                 "/I${workspaceFolder}\\src\\vendor",
+                "/I${workspaceFolder}\\src\\vendor",
                 "/link",
                 "/SUBSYSTEM:WINDOWS",
                 "/LIBPATH:%VULKAN_SDK%\\Lib",
