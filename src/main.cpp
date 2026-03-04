@@ -44,11 +44,18 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
         return -1;
     }
 
+    // const Vertex vertices[] = {
+    //     {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+    //     {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
+    //     {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
+    //     {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
+    // };
+
     const Vertex vertices[] = {
-        {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-        {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
-        {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
-        {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
+        {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+        {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+        {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+        {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
     };
 
     const u16 indices[] = {

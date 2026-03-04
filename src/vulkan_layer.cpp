@@ -12,7 +12,7 @@ struct Vertex
 {
     glm::vec2 pos;
     glm::vec3 color;
-
+    glm::vec2 texCoord;
 };
 
 struct UniformBufferObject 
@@ -33,7 +33,7 @@ VkVertexInputBindingDescription VertexGetBindingDescription()
 
 VkVertexInputAttributeDescription* VertexGetInputAttributeDescription()
 {
-    VkVertexInputAttributeDescription* result = new VkVertexInputAttributeDescription[2];
+    VkVertexInputAttributeDescription* result = new VkVertexInputAttributeDescription[3];
 
     result[0] = {};
     result[0].location = 0;
@@ -46,6 +46,12 @@ VkVertexInputAttributeDescription* VertexGetInputAttributeDescription()
     result[1].binding = 0;
     result[1].format = VK_FORMAT_R32G32B32_SFLOAT;
     result[1].offset = offsetof(Vertex, color);
+
+    result[2] = {};
+    result[2].location = 2;
+    result[2].binding = 0;
+    result[2].format = VK_FORMAT_R32G32_SFLOAT;
+    result[2].offset = offsetof(Vertex, texCoord);
     
     return result;
 }
@@ -528,18 +534,23 @@ bool VkmInitialize()
         return false;
     }
 
-    VkDescriptorSetLayoutBinding descriptorSetLayoutBinding;
-    descriptorSetLayoutBinding.binding = 0;
-    descriptorSetLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    descriptorSetLayoutBinding.descriptorCount = 1;
-    descriptorSetLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-    descriptorSetLayoutBinding.pImmutableSamplers = nullptr;
+    VkDescriptorSetLayoutBinding descriptorSetBindings[2] = {};
+    descriptorSetBindings[0].binding = 0;
+    descriptorSetBindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    descriptorSetBindings[0].descriptorCount = 1;
+    descriptorSetBindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    descriptorSetBindings[0].pImmutableSamplers = nullptr;
+    descriptorSetBindings[1].binding = 1;
+    descriptorSetBindings[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    descriptorSetBindings[1].descriptorCount = 1;
+    descriptorSetBindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    descriptorSetBindings[1].pImmutableSamplers = nullptr;
     VkDescriptorSetLayoutCreateInfo setLayoutCreateInfo;
     setLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
     setLayoutCreateInfo.pNext = nullptr;
     setLayoutCreateInfo.flags = 0;
-    setLayoutCreateInfo.bindingCount = 1;
-    setLayoutCreateInfo.pBindings = &descriptorSetLayoutBinding;
+    setLayoutCreateInfo.bindingCount = 2;
+    setLayoutCreateInfo.pBindings = descriptorSetBindings;
     VkDescriptorSetLayout descriptorSetLayout = VK_NULL_HANDLE; 
     vkResult = vkCreateDescriptorSetLayout(vkm.vkDevice, &setLayoutCreateInfo, nullptr, &descriptorSetLayout);
     if (vkResult != VK_SUCCESS)
@@ -583,7 +594,7 @@ bool VkmInitialize()
     pipelineVertexInputStateCreateInfo.flags = 0;
     pipelineVertexInputStateCreateInfo.vertexBindingDescriptionCount = 1;
     pipelineVertexInputStateCreateInfo.pVertexBindingDescriptions = &bindingDescription;
-    pipelineVertexInputStateCreateInfo.vertexAttributeDescriptionCount = 2;
+    pipelineVertexInputStateCreateInfo.vertexAttributeDescriptionCount = 3;
     pipelineVertexInputStateCreateInfo.pVertexAttributeDescriptions = attributeDescriptions;
 
     VkPipelineInputAssemblyStateCreateInfo pipelineInputAssemblyStateCreateInfo = {};
@@ -759,77 +770,6 @@ bool VkmInitialize()
         }
     }
 
-    VkDescriptorPoolSize descriptorPoolSize = {};
-    descriptorPoolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    descriptorPoolSize.descriptorCount = MAX_FRAMES_IN_FLIGHT;
-    VkDescriptorPoolCreateInfo descriptorPoolCreateInfo = {};
-    descriptorPoolCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    descriptorPoolCreateInfo.pNext = nullptr;
-    descriptorPoolCreateInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
-    descriptorPoolCreateInfo.maxSets = MAX_FRAMES_IN_FLIGHT;
-    descriptorPoolCreateInfo.poolSizeCount = 1;
-    descriptorPoolCreateInfo.pPoolSizes = &descriptorPoolSize;
-    vkCreateDescriptorPool(vkm.vkDevice, &descriptorPoolCreateInfo, nullptr, &vkm.descriptorPool);
-    
-    VkDescriptorSetAllocateInfo descriptorSetAllocateInfo = {};
-    descriptorSetAllocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    descriptorSetAllocateInfo.pNext = nullptr;
-    descriptorSetAllocateInfo.descriptorPool = vkm.descriptorPool;
-    descriptorSetAllocateInfo.descriptorSetCount = ARRAY_COUNT(vkm.descriptorSetLayouts);
-    descriptorSetAllocateInfo.pSetLayouts = vkm.descriptorSetLayouts;
-    vkAllocateDescriptorSets(vkm.vkDevice, &descriptorSetAllocateInfo, vkm.descriptorSets);
-
-    for (u32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) 
-    {
-        VkDescriptorBufferInfo descriptorBufferInfo = {};
-        descriptorBufferInfo.buffer = vkm.uniformBuffers[i];
-        descriptorBufferInfo.offset = 0;
-        descriptorBufferInfo.range = uniformBufferSize;
-
-        VkWriteDescriptorSet writeDescriptorSet = {};
-        writeDescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        writeDescriptorSet.pNext = nullptr;
-        writeDescriptorSet.dstSet = vkm.descriptorSets[i];
-        writeDescriptorSet.dstBinding = 0;
-        writeDescriptorSet.dstArrayElement = 0;
-        writeDescriptorSet.descriptorCount = 1;
-        writeDescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        writeDescriptorSet.pImageInfo = nullptr;
-        writeDescriptorSet.pBufferInfo = &descriptorBufferInfo;
-        writeDescriptorSet.pTexelBufferView = nullptr;
-
-        vkUpdateDescriptorSets(vkm.vkDevice, 1, &writeDescriptorSet, 0, nullptr);
-    }
-
-    VkSemaphoreCreateInfo semaphoreInfo{};
-    semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-    
-    VkFenceCreateInfo fenceInfo{};
-    fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-    fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-        
-    
-    for (u32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
-    {
-        if (   
-            vkCreateSemaphore(vkm.vkDevice, &semaphoreInfo, nullptr, &vkm.acquireSemaphores[i]) != VK_SUCCESS ||
-            vkCreateFence(vkm.vkDevice, &fenceInfo, nullptr, &vkm.frameFences[i]) != VK_SUCCESS) 
-        {
-            OutputDebugString("failed to create semaphores!");
-            return false;
-        }
-    }
-    
-    vkm.submitSemaphores = new VkSemaphore[vkm.swapChainImagesCount];
-    for (u32 i = 0; i < vkm.swapChainImagesCount; i++)
-    {
-        if (vkCreateSemaphore(vkm.vkDevice, &semaphoreInfo, nullptr, &vkm.submitSemaphores[i]))
-        {
-            OutputDebugString("failed to create semaphores!");
-            return false;
-        }
-    }
-
     if (!VkmCreateTextureImage())
     {
         OutputDebugString("Could not make texture image");
@@ -841,15 +781,6 @@ bool VkmInitialize()
         OutputDebugString("Could not create texture image view");
         return false;
     }
-    // VkImageViewCreateInfo textureImageViewCreateInfo = {};
-    // textureImageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    // textureImageViewCreateInfo.pNext = nullptr;
-    // textureImageViewCreateInfo.flags;
-    // VkImage                    textureImageViewCreateInfo.image;
-    // textureImageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    // VkFormat                   textureImageViewCreateInfo.format;
-    // VkComponentMapping         textureImageViewCreateInfo.components;
-    // VkImageSubresourceRange    textureImageViewCreateInfo.subresourceRange;
 
     VkPhysicalDeviceProperties physicalDeviceProperties = {};
     vkGetPhysicalDeviceProperties(vkm.physicalDevice, &physicalDeviceProperties);
@@ -875,6 +806,104 @@ bool VkmInitialize()
     samplerCreateInfo.unnormalizedCoordinates = false;
 
     vkCreateSampler(vkm.vkDevice, &samplerCreateInfo, nullptr, &vkm.textureSampler);
+
+    VkDescriptorPoolSize descriptorPoolSizes[2] = {};
+    descriptorPoolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    descriptorPoolSizes[0].descriptorCount = MAX_FRAMES_IN_FLIGHT;
+    descriptorPoolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    descriptorPoolSizes[1].descriptorCount = MAX_FRAMES_IN_FLIGHT;
+    VkDescriptorPoolCreateInfo descriptorPoolCreateInfo = {};
+    descriptorPoolCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    descriptorPoolCreateInfo.pNext = nullptr;
+    descriptorPoolCreateInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+    descriptorPoolCreateInfo.maxSets = MAX_FRAMES_IN_FLIGHT;
+    descriptorPoolCreateInfo.poolSizeCount = 2;
+    descriptorPoolCreateInfo.pPoolSizes = descriptorPoolSizes;
+    vkCreateDescriptorPool(vkm.vkDevice, &descriptorPoolCreateInfo, nullptr, &vkm.descriptorPool);
+    
+    VkDescriptorSetAllocateInfo descriptorSetAllocateInfo = {};
+    descriptorSetAllocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    descriptorSetAllocateInfo.pNext = nullptr;
+    descriptorSetAllocateInfo.descriptorPool = vkm.descriptorPool;
+    descriptorSetAllocateInfo.descriptorSetCount = ARRAY_COUNT(vkm.descriptorSetLayouts);
+    descriptorSetAllocateInfo.pSetLayouts = vkm.descriptorSetLayouts;
+    vkAllocateDescriptorSets(vkm.vkDevice, &descriptorSetAllocateInfo, vkm.descriptorSets);
+
+    for (u32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) 
+    {
+        VkDescriptorBufferInfo descriptorBufferInfo = {};
+        descriptorBufferInfo.buffer = vkm.uniformBuffers[i];
+        descriptorBufferInfo.offset = 0;
+        descriptorBufferInfo.range = uniformBufferSize;
+
+        VkDescriptorImageInfo imageInfo = {};
+        imageInfo.sampler = vkm.textureSampler;
+        imageInfo.imageView = vkm.textureImageView;
+        imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+        VkWriteDescriptorSet writeDescriptorSets[2] = {};
+        writeDescriptorSets[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writeDescriptorSets[0].pNext = nullptr;
+        writeDescriptorSets[0].dstSet = vkm.descriptorSets[i];
+        writeDescriptorSets[0].dstBinding = 0;
+        writeDescriptorSets[0].dstArrayElement = 0;
+        writeDescriptorSets[0].descriptorCount = 1;
+        writeDescriptorSets[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        writeDescriptorSets[0].pImageInfo = nullptr;
+        writeDescriptorSets[0].pBufferInfo = &descriptorBufferInfo;
+        writeDescriptorSets[0].pTexelBufferView = nullptr;
+        
+        writeDescriptorSets[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writeDescriptorSets[1].pNext = nullptr;
+        writeDescriptorSets[1].dstSet = vkm.descriptorSets[i];
+        writeDescriptorSets[1].dstBinding = 1;
+        writeDescriptorSets[1].dstArrayElement = 0;
+        writeDescriptorSets[1].descriptorCount = 1;
+        writeDescriptorSets[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        writeDescriptorSets[1].pImageInfo = &imageInfo;
+        writeDescriptorSets[1].pBufferInfo = nullptr;
+        writeDescriptorSets[1].pTexelBufferView = nullptr;
+
+        vkUpdateDescriptorSets(vkm.vkDevice, 2, writeDescriptorSets, 0, nullptr);
+    }
+
+    VkSemaphoreCreateInfo semaphoreInfo{};
+    semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+    
+    VkFenceCreateInfo fenceInfo{};
+    fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+    
+    for (u32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+    {
+        if (   
+            vkCreateSemaphore(vkm.vkDevice, &semaphoreInfo, nullptr, &vkm.acquireSemaphores[i]) != VK_SUCCESS ||
+            vkCreateFence(vkm.vkDevice, &fenceInfo, nullptr, &vkm.frameFences[i]) != VK_SUCCESS) 
+        {
+            OutputDebugString("failed to create semaphores!");
+            return false;
+        }
+    }
+    
+    vkm.submitSemaphores = new VkSemaphore[vkm.swapChainImagesCount];
+    for (u32 i = 0; i < vkm.swapChainImagesCount; i++)
+    {
+        if (vkCreateSemaphore(vkm.vkDevice, &semaphoreInfo, nullptr, &vkm.submitSemaphores[i]))
+        {
+            OutputDebugString("failed to create semaphores!");
+            return false;
+        }
+    }
+
+    // VkImageViewCreateInfo textureImageViewCreateInfo = {};
+    // textureImageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    // textureImageViewCreateInfo.pNext = nullptr;
+    // textureImageViewCreateInfo.flags;
+    // VkImage                    textureImageViewCreateInfo.image;
+    // textureImageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    // VkFormat                   textureImageViewCreateInfo.format;
+    // VkComponentMapping         textureImageViewCreateInfo.components;
+    // VkImageSubresourceRange    textureImageViewCreateInfo.subresourceRange;
 
     return true;
 }
