@@ -104,6 +104,7 @@ struct VkMState
     VkImage textureImage;
     VkDeviceMemory textureImageMemory;
     VkImageView textureImageView;
+    VkSampler textureSampler;
 };
 VkMState vkm = {};
 
@@ -113,6 +114,7 @@ bool VkmCreateAndFillBuffer(VkDeviceSize size, void* data, VkBufferUsageFlags us
 bool VkmCreateBuffer(VkDeviceSize size, VkBufferUsageFlags usageFlags, VkMemoryPropertyFlags memoryPropertyFlags, VkBuffer* buffer, VkDeviceMemory* bufferMemory);
 bool VkmRecreateSwapChain();
 bool VkmCreateTextureImage();
+bool VkmCreateImageView(VkImage* image, VkFormat format, VkImageView* imageView);
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL VkmDebgCallback(
     VkDebugUtilsMessageSeverityFlagBitsEXT   messageSeverity,
@@ -414,45 +416,21 @@ bool VkmInitialize()
         queueCreateInfoCount = 2;
     }
 
-    VkPhysicalDeviceFeatures2 vkPhysicalDeviceFeatures2;
+    VkPhysicalDeviceFeatures2 vkPhysicalDeviceFeatures2 = {};
     vkPhysicalDeviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     vkPhysicalDeviceFeatures2.pNext = nullptr;
-    vkPhysicalDeviceFeatures2.features = {};
+    vkPhysicalDeviceFeatures2.features.samplerAnisotropy = true;
 
     VkPhysicalDeviceVulkan11Features vkPhysicalDeviceVulkan11Features = {};
     vkPhysicalDeviceVulkan11Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
     vkPhysicalDeviceVulkan11Features.pNext = nullptr;
-    vkPhysicalDeviceVulkan11Features.storageBuffer16BitAccess = false;
-    vkPhysicalDeviceVulkan11Features.uniformAndStorageBuffer16BitAccess = false;
-    vkPhysicalDeviceVulkan11Features.storagePushConstant16 = false;
-    vkPhysicalDeviceVulkan11Features.storageInputOutput16 = false;
-    vkPhysicalDeviceVulkan11Features.multiview = false;
-    vkPhysicalDeviceVulkan11Features.multiviewGeometryShader = false;
-    vkPhysicalDeviceVulkan11Features.multiviewTessellationShader = false;
-    vkPhysicalDeviceVulkan11Features.variablePointersStorageBuffer = false;
-    vkPhysicalDeviceVulkan11Features.variablePointers = false;
-    vkPhysicalDeviceVulkan11Features.protectedMemory = false;
-    vkPhysicalDeviceVulkan11Features.samplerYcbcrConversion = false;
     vkPhysicalDeviceVulkan11Features.shaderDrawParameters = true;
 
     VkPhysicalDeviceVulkan13Features vkPhysicalDeviceVulkan13Features = {};
     vkPhysicalDeviceVulkan13Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
     vkPhysicalDeviceVulkan13Features.pNext = nullptr;
-    vkPhysicalDeviceVulkan13Features.robustImageAccess = false;
-    vkPhysicalDeviceVulkan13Features.inlineUniformBlock = false;
-    vkPhysicalDeviceVulkan13Features.descriptorBindingInlineUniformBlockUpdateAfterBind = false;
-    vkPhysicalDeviceVulkan13Features.pipelineCreationCacheControl = false;
-    vkPhysicalDeviceVulkan13Features.privateData = false;
-    vkPhysicalDeviceVulkan13Features.shaderDemoteToHelperInvocation = false;
-    vkPhysicalDeviceVulkan13Features.shaderTerminateInvocation = false;
-    vkPhysicalDeviceVulkan13Features.subgroupSizeControl = false;
-    vkPhysicalDeviceVulkan13Features.computeFullSubgroups = false;
     vkPhysicalDeviceVulkan13Features.synchronization2 = true;
-    vkPhysicalDeviceVulkan13Features.textureCompressionASTC_HDR = false;
-    vkPhysicalDeviceVulkan13Features.shaderZeroInitializeWorkgroupMemory = false;
     vkPhysicalDeviceVulkan13Features.dynamicRendering = true;
-    vkPhysicalDeviceVulkan13Features.shaderIntegerDotProduct = false;
-    vkPhysicalDeviceVulkan13Features.maintenance4 = false;
 
     VkPhysicalDeviceExtendedDynamicStateFeaturesEXT vkPhysicalDeviceExtendedDynamicStateFeaturesEXT;
     vkPhysicalDeviceExtendedDynamicStateFeaturesEXT.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT;
@@ -858,6 +836,11 @@ bool VkmInitialize()
         return false;
     }
 
+    if (!VkmCreateImageView(&vkm.textureImage, VK_FORMAT_R8G8B8A8_SRGB, &vkm.textureImageView))
+    {
+        OutputDebugString("Could not create texture image view");
+        return false;
+    }
     // VkImageViewCreateInfo textureImageViewCreateInfo = {};
     // textureImageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     // textureImageViewCreateInfo.pNext = nullptr;
@@ -867,6 +850,31 @@ bool VkmInitialize()
     // VkFormat                   textureImageViewCreateInfo.format;
     // VkComponentMapping         textureImageViewCreateInfo.components;
     // VkImageSubresourceRange    textureImageViewCreateInfo.subresourceRange;
+
+    VkPhysicalDeviceProperties physicalDeviceProperties = {};
+    vkGetPhysicalDeviceProperties(vkm.physicalDevice, &physicalDeviceProperties);
+
+    VkSamplerCreateInfo samplerCreateInfo = {};
+    samplerCreateInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    samplerCreateInfo.pNext = nullptr;
+    samplerCreateInfo.flags = 0;
+    samplerCreateInfo.magFilter = VK_FILTER_LINEAR;
+    samplerCreateInfo.minFilter = VK_FILTER_LINEAR;
+    samplerCreateInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    samplerCreateInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerCreateInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerCreateInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerCreateInfo.mipLodBias = 0;
+    samplerCreateInfo.anisotropyEnable = true;
+    samplerCreateInfo.maxAnisotropy = physicalDeviceProperties.limits.maxSamplerAnisotropy;
+    samplerCreateInfo.compareEnable = false;
+    samplerCreateInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+    samplerCreateInfo.minLod = 0;
+    samplerCreateInfo.maxLod = 0;
+    samplerCreateInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+    samplerCreateInfo.unnormalizedCoordinates = false;
+
+    vkCreateSampler(vkm.vkDevice, &samplerCreateInfo, nullptr, &vkm.textureSampler);
 
     return true;
 }
@@ -912,8 +920,32 @@ void VkmCleanUp()
     delete[] vkm.shaderFileBytes;
 }
 
-bool VkmCreateImageView(VkImage image, VkFormat format)
+bool VkmCreateImageView(VkImage* image, VkFormat format, VkImageView* imageView)
 {
+    VkImageViewCreateInfo imageViewCreateInfo = {};
+    imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    imageViewCreateInfo.pNext = nullptr;
+    imageViewCreateInfo.flags = 0;
+    imageViewCreateInfo.image = *image;
+    imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    imageViewCreateInfo.format = format;
+    imageViewCreateInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+    imageViewCreateInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+    imageViewCreateInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+    imageViewCreateInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+    imageViewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    imageViewCreateInfo.subresourceRange.baseMipLevel = 0;
+    imageViewCreateInfo.subresourceRange.levelCount = 1;
+    imageViewCreateInfo.subresourceRange.baseArrayLayer = 0;
+    imageViewCreateInfo.subresourceRange.layerCount = 1;
+
+    VkResult vkResult = vkCreateImageView(vkm.vkDevice, &imageViewCreateInfo, nullptr, imageView);
+    if (vkResult != VK_SUCCESS)
+    {
+        OutputDebugString("Failed to create image view.");
+        return false;
+    }
+
     return true;
 }
 // void VkmCopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size)
@@ -1359,15 +1391,16 @@ bool VkmRecreateSwapChain()
     vkm.swapChainImageViews = new VkImageView[vkm.swapChainImagesCount];
     for (u32 i = 0; i < vkm.swapChainImagesCount; i++)
     {
-        VkImage currentImage = vkm.swapChainImages[i];
-        imageViewCreateInfo.image = currentImage;
+        // VkImage currentImage = vkm.swapChainImages[i];
+        // imageViewCreateInfo.image = currentImage;
 
-         vkResult = vkCreateImageView(vkm.vkDevice, &imageViewCreateInfo, nullptr, &vkm.swapChainImageViews[i]);
-         if (vkResult != VK_SUCCESS)
-         {
-            OutputDebugString("Failed to create an image view for swap buffer image");
-            return false;
-         }
+        //  vkResult = vkCreateImageView(vkm.vkDevice, &imageViewCreateInfo, nullptr, &vkm.swapChainImageViews[i]);
+        //  if (vkResult != VK_SUCCESS)
+        //  {
+        //     OutputDebugString("Failed to create an image view for swap buffer image");
+        //     return false;
+        //  }
+        VkmCreateImageView(&vkm.swapChainImages[i], vkm.swapChainImageFormat, &vkm.swapChainImageViews[i]);
     }
 
     return true;
