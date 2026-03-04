@@ -1,4 +1,5 @@
 #define WIN32_MEAN_AND_LEAN
+#define WIN32_MEAN_AND_LEAN
 #include <windows.h>
 #define VK_USE_PLATFORM_WIN32_KHR
 #include <vulkan/vulkan.h>
@@ -102,15 +103,16 @@ struct VkMState
 
     VkImage textureImage;
     VkDeviceMemory textureImageMemory;
+    VkImageView textureImageView;
 };
 VkMState vkm = {};
 
-void VkmCopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
+bool VkmCopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
 s32 VkmFindMemoryTypeIndex(uint32_t typeFilter, VkMemoryPropertyFlags memoryPropertyFlags);
 bool VkmCreateAndFillBuffer(VkDeviceSize size, void* data, VkBufferUsageFlags usageFlags, VkMemoryPropertyFlags memoryPropertyFlags, VkBuffer* buffer, VkDeviceMemory* bufferMemory);
 bool VkmCreateBuffer(VkDeviceSize size, VkBufferUsageFlags usageFlags, VkMemoryPropertyFlags memoryPropertyFlags, VkBuffer* buffer, VkDeviceMemory* bufferMemory);
 bool VkmRecreateSwapChain();
-bool VkMVulkanInitialize();
+bool VkmCreateTextureImage();
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL VkmDebgCallback(
     VkDebugUtilsMessageSeverityFlagBitsEXT   messageSeverity,
@@ -850,6 +852,22 @@ bool VkmInitialize()
         }
     }
 
+    if (!VkmCreateTextureImage())
+    {
+        OutputDebugString("Could not make texture image");
+        return false;
+    }
+
+    // VkImageViewCreateInfo textureImageViewCreateInfo = {};
+    // textureImageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    // textureImageViewCreateInfo.pNext = nullptr;
+    // textureImageViewCreateInfo.flags;
+    // VkImage                    textureImageViewCreateInfo.image;
+    // textureImageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    // VkFormat                   textureImageViewCreateInfo.format;
+    // VkComponentMapping         textureImageViewCreateInfo.components;
+    // VkImageSubresourceRange    textureImageViewCreateInfo.subresourceRange;
+
     return true;
 }
 
@@ -894,58 +912,227 @@ void VkmCleanUp()
     delete[] vkm.shaderFileBytes;
 }
 
-void VkmCopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size)
+bool VkmCreateImageView(VkImage image, VkFormat format)
 {
-    VkCommandBufferAllocateInfo commandBufferAllocateInfo = {};
-    commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    commandBufferAllocateInfo.pNext = nullptr;
-    commandBufferAllocateInfo.commandPool = vkm.commandPool;
-    commandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    commandBufferAllocateInfo.commandBufferCount = 1;
+    return true;
+}
+// void VkmCopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size)
+// {
+//     VkCommandBufferAllocateInfo commandBufferAllocateInfo = {};
+//     commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+//     commandBufferAllocateInfo.pNext = nullptr;
+//     commandBufferAllocateInfo.commandPool = vkm.commandPool;
+//     commandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+//     commandBufferAllocateInfo.commandBufferCount = 1;
 
-    VkCommandBuffer commandCopyBuffer;
-    VkResult result = vkAllocateCommandBuffers(vkm.vkDevice, &commandBufferAllocateInfo, &commandCopyBuffer);
-    if (result != VK_SUCCESS) 
+//     VkCommandBuffer commandCopyBuffer;
+//     VkResult result = vkAllocateCommandBuffers(vkm.vkDevice, &commandBufferAllocateInfo, &commandCopyBuffer);
+//     if (result != VK_SUCCESS) 
+//     {
+//         OutputDebugString("Could not allocate temp command buffer");
+//         return;
+//     }
+
+//     VkCommandBufferBeginInfo beginInfo = {};
+//     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+//     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT; 
+//     beginInfo.pInheritanceInfo = nullptr; 
+
+//     result = vkBeginCommandBuffer(commandCopyBuffer, &beginInfo);
+//     if (result != VK_SUCCESS)
+//     {
+//         OutputDebugString("Could not begin command buffer");
+//         return;
+//     }
+
+//     VkBufferCopy copyRegion = {};
+//     copyRegion.srcOffset = 0;
+//     copyRegion.dstOffset = 0;
+//     copyRegion.size = size;
+
+//     vkCmdCopyBuffer(commandCopyBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
+
+//     result = vkEndCommandBuffer(commandCopyBuffer);
+//     if (result != VK_SUCCESS)
+//     {
+//         OutputDebugString("Could not end command buffer");
+//         return;
+//     }
+
+//     VkSubmitInfo submitInfo = {};
+//     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+//     submitInfo.commandBufferCount = 1;
+//     submitInfo.pCommandBuffers = &commandCopyBuffer;
+
+//     vkQueueSubmit(vkm.graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
+//     vkQueueWaitIdle(vkm.graphicsQueue);
+
+//     vkFreeCommandBuffers(vkm.vkDevice, vkm.commandPool, 1, &commandCopyBuffer);
+// }
+
+bool VkmBeginSingleTimeCommands(VkCommandBuffer* commandBuffer)
+{
+    VkCommandBufferAllocateInfo allocInfo = {};
+    allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    allocInfo.pNext = nullptr;
+    allocInfo.commandPool = vkm.commandPool;
+    allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    allocInfo.commandBufferCount = 1;
+
+    *commandBuffer = VK_NULL_HANDLE;
+    VkResult vkResult = vkAllocateCommandBuffers(vkm.vkDevice, &allocInfo, commandBuffer);
+    if (vkResult != VK_SUCCESS)
     {
-        OutputDebugString("Could not allocate temp command buffer");
-        return;
+        OutputDebugString("Could not allocate for command buffer\n");
+        return false;
     }
 
     VkCommandBufferBeginInfo beginInfo = {};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT; 
-    beginInfo.pInheritanceInfo = nullptr; 
+    beginInfo.pNext = nullptr;
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    beginInfo.pInheritanceInfo = nullptr;
 
-    result = vkBeginCommandBuffer(commandCopyBuffer, &beginInfo);
-    if (result != VK_SUCCESS)
+    vkResult = vkBeginCommandBuffer(*commandBuffer, &beginInfo);
+    if (vkResult != VK_SUCCESS) 
     {
-        OutputDebugString("Could not begin command buffer");
-        return;
+        OutputDebugString("Could start for command buffer\n");
+        return VK_NULL_HANDLE;
+    }
+    
+    return true;
+}
+
+void VkmEndSingleTimeCommands(VkCommandBuffer* commandBuffer)
+{
+    vkEndCommandBuffer(*commandBuffer);
+    VkSubmitInfo submitInfo = {};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.pNext = nullptr;
+    submitInfo.waitSemaphoreCount = 0;
+    submitInfo.pWaitSemaphores = nullptr;
+    submitInfo.pWaitDstStageMask = nullptr;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = commandBuffer;
+    submitInfo.signalSemaphoreCount = 0;
+    submitInfo.pSignalSemaphores = nullptr;
+
+    vkQueueSubmit(vkm.graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
+
+    vkQueueWaitIdle(vkm.graphicsQueue);
+
+    vkFreeCommandBuffers(vkm.vkDevice, vkm.commandPool, 1, commandBuffer);
+}
+
+bool VkmCopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size)
+{
+    VkCommandBuffer commandCopyBuffer = VK_NULL_HANDLE;
+    if (!VkmBeginSingleTimeCommands(&commandCopyBuffer))
+    {
+        return false;
     }
 
     VkBufferCopy copyRegion = {};
     copyRegion.srcOffset = 0;
     copyRegion.dstOffset = 0;
     copyRegion.size = size;
-
     vkCmdCopyBuffer(commandCopyBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
 
-    result = vkEndCommandBuffer(commandCopyBuffer);
-    if (result != VK_SUCCESS)
+    VkmEndSingleTimeCommands(&commandCopyBuffer);
+    return true;
+}
+
+bool VkmTransitionImageLayout(VkImage *image, VkImageLayout oldLayout, VkImageLayout newLayout)
+{
+    VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+    if (!VkmBeginSingleTimeCommands(&commandBuffer))
     {
-        OutputDebugString("Could not end command buffer");
-        return;
+        return false;
     }
 
-    VkSubmitInfo submitInfo = {};
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &commandCopyBuffer;
+    VkImageMemoryBarrier barrier = {};
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barrier.pNext = nullptr;
+    barrier.srcAccessMask = 0;
+    barrier.dstAccessMask = 0;
+    barrier.oldLayout = oldLayout;
+    barrier.newLayout = newLayout;
+    barrier.srcQueueFamilyIndex = 0;
+    barrier.dstQueueFamilyIndex = 0;
+    barrier.image = *image;
+    VkImageSubresourceRange subresourceRange = {};
+    subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    subresourceRange.baseMipLevel = 0;
+    subresourceRange.levelCount = 1;
+    subresourceRange.baseArrayLayer = 0;
+    subresourceRange.layerCount = 1;
+    barrier.subresourceRange = subresourceRange;
 
-    vkQueueSubmit(vkm.graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
-    vkQueueWaitIdle(vkm.graphicsQueue);
+    VkPipelineStageFlags sourceStage = 0;
+    VkPipelineStageFlags destinationStage = 0;
 
-    vkFreeCommandBuffers(vkm.vkDevice, vkm.commandPool, 1, &commandCopyBuffer);
+    if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
+    {
+        barrier.srcAccessMask = {};
+        barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+
+        sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+        destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+    }
+    else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+    {
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+        sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+        destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    }
+    else
+    {
+        OutputDebugString("Unsupported layout transition.");
+        return false;
+    }
+
+    vkCmdPipelineBarrier(commandBuffer,
+        sourceStage,
+        destinationStage,
+        0,                  
+        0, nullptr,            
+        0, nullptr,            
+        1, &barrier         
+    );
+
+    VkmEndSingleTimeCommands(&commandBuffer);
+    return true;
+}
+
+bool VkmCopyBufferToImage(VkBuffer buffer, VkImage image, u32 width, u32 height)
+{
+    VkCommandBuffer commandCopyBuffer = VK_NULL_HANDLE;
+    if (!VkmBeginSingleTimeCommands(&commandCopyBuffer))
+    {
+        return false;
+    }
+
+    VkBufferImageCopy region = {};
+    region.bufferOffset = 0;
+    region.bufferRowLength = 0;
+    region.bufferImageHeight = 0;
+    region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    region.imageSubresource.mipLevel = 0;
+    region.imageSubresource.baseArrayLayer = 0;
+    region.imageSubresource.layerCount = 1;
+    region.imageOffset.x = 0;
+    region.imageOffset.y = 0;
+    region.imageOffset.z = 0;
+    region.imageExtent.width = width;
+    region.imageExtent.height = height;
+    region.imageExtent.depth = 1;
+
+    vkCmdCopyBufferToImage(commandCopyBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+    VkmEndSingleTimeCommands(&commandCopyBuffer);
+    return true;
 }
 
 s32 VkmFindMemoryTypeIndex(uint32_t typeFilter, VkMemoryPropertyFlags memoryPropertyFlags)
@@ -1389,7 +1576,7 @@ bool VkmEndRenderingAndSetupForPresent(VkCommandBuffer commandBuffer)
     return true;
 }
 
-bool CreateTextureImage()
+bool VkmCreateTextureImage()
 {
     int texWidth, texHeight, texChannels;
     stbi_uc* pixels = stbi_load("textures/texture.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
@@ -1449,26 +1636,10 @@ bool CreateTextureImage()
         return false;
     }
     vkBindImageMemory(vkm.vkDevice, vkm.textureImage, vkm.textureImageMemory, 0);
+
+    VkmTransitionImageLayout(&vkm.textureImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    VkmCopyBufferToImage(stagingBuffer, vkm.textureImage, texWidth, texHeight);
+    VkmTransitionImageLayout(&vkm.textureImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     
-    return true;
-}
-
-bool VkmBeginSingleTimeCommands()
-{
-    VkCommandBufferAllocateInfo allocInfo = {};
-    allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    allocInfo.pNext = nullptr;
-    allocInfo.commandPool = vkm.commandPool;
-    allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    allocInfo.commandBufferCount = 1;
-
-    VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
-    VkResult vkResult = vkAllocateCommandBuffers(vkm.vkDevice, &allocInfo, &commandBuffer);
-    if (vkResult != VK_SUCCESS)
-    {
-        OutputDebugString("Could not allocate for command buffer\n");
-        return false;
-    }
-
     return true;
 }

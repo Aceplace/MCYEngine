@@ -92,7 +92,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
     }
     VkmCopyBuffer(stagingBufferForIndices, indexBuffer, indexBufferSize);
 
-
     ShowWindow(_hwnd, nCmdShow);        
     MSG msg = { };
     bool running = true;
