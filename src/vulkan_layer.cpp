@@ -56,6 +56,16 @@ VkVertexInputAttributeDescription* VertexGetInputAttributeDescription()
     return result;
 }
 
+#define VK_CALL(call, msg)                       \
+    do {                                        \
+        VkResult _vkResult = (call);           \
+        if (_vkResult != VK_SUCCESS) {         \
+            OutputDebugString(msg);            \
+            OutputDebugString("\n");            \
+            return true;                      \
+        }                                      \
+    } while (0)
+
 const u32 MAX_FRAMES_IN_FLIGHT = 2;
 
 HWND _hwnd = NULL;
@@ -154,7 +164,6 @@ bool VkmInitialize()
     vkm.graphicsQueueIndex = -1;
     vkm.presentQueueIndex = -1;
 
-    VkResult vkResult;
     VkApplicationInfo vkApplicationInfo;
     vkApplicationInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     vkApplicationInfo.pNext = nullptr;
@@ -215,14 +224,7 @@ bool VkmInitialize()
     vkInstanceCreateInfo.enabledExtensionCount = ARRAY_COUNT(instanceExtensions);
     vkInstanceCreateInfo.ppEnabledExtensionNames = instanceExtensions;
 
-    vkResult = vkCreateInstance(&vkInstanceCreateInfo, nullptr, &vkm.vkInstance);
-
-    if (vkResult != VK_SUCCESS)
-    {
-        OutputDebugString("Could not create Vulkan Instance\n");
-        return false;
-    }
-    OutputDebugString("Created Vulkan Instance\n");
+    VK_CALL(vkCreateInstance(&vkInstanceCreateInfo, nullptr, &vkm.vkInstance), "Could not create Vulkan instance");
 
     VkWin32SurfaceCreateInfoKHR win32SurfaceCreateInfo{};
     win32SurfaceCreateInfo.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
@@ -231,12 +233,7 @@ bool VkmInitialize()
     win32SurfaceCreateInfo.hwnd = _hwnd;
     win32SurfaceCreateInfo.hinstance = GetModuleHandle(nullptr);
 
-    vkResult = vkCreateWin32SurfaceKHR(vkm.vkInstance, &win32SurfaceCreateInfo, nullptr, &vkm.surface);
-    if (vkResult != VK_SUCCESS)
-    {
-        OutputDebugString("Could not create win32 surface\n");
-        return false;
-    }
+    VK_CALL(vkCreateWin32SurfaceKHR(vkm.vkInstance, &win32SurfaceCreateInfo, nullptr, &vkm.surface), "Could not create win32 surface");
     
     PFN_vkCreateDebugUtilsMessengerEXT pfnCreateDebugUtilsMessengerEXT = nullptr;
     pfnCreateDebugUtilsMessengerEXT = (PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(vkm.vkInstance, "vkCreateDebugUtilsMessengerEXT");    
@@ -263,12 +260,7 @@ bool VkmInitialize()
     vkDebugUtilsMessengerCreateInfoEXT.pfnUserCallback = VkmDebgCallback;
     vkDebugUtilsMessengerCreateInfoEXT.pUserData = nullptr;
 
-    if (vkResult != VK_SUCCESS)
-    {
-        OutputDebugString("Could not create debug util messenger\n");
-        return false;
-    }
-    OutputDebugString("Created debug util messenger\n");
+    VK_CALL(pfnCreateDebugUtilsMessengerEXT(vkm.vkInstance, &vkDebugUtilsMessengerCreateInfoEXT, nullptr, &vkm.vKDebugUtilsMessengerExt), "Could not create debug util messenger");
 
     u32 vkPhysicalDeviceCount;
     vkEnumeratePhysicalDevices(vkm.vkInstance, &vkPhysicalDeviceCount, nullptr);
@@ -280,13 +272,7 @@ bool VkmInitialize()
     }
     
     VkPhysicalDevice* vkPhysicalDevices = new VkPhysicalDevice[vkPhysicalDeviceCount];
-    vkResult = vkEnumeratePhysicalDevices(vkm.vkInstance, &vkPhysicalDeviceCount, vkPhysicalDevices);
-
-    if (vkResult != VK_SUCCESS)
-    {
-        OutputDebugString("Could not enumerate physical devices\n");
-        return false;
-    }
+    VK_CALL(vkEnumeratePhysicalDevices(vkm.vkInstance, &vkPhysicalDeviceCount, vkPhysicalDevices), "Could not enumerate devices");
 
     const char* deviceExtensions[] = {
         VK_KHR_SWAPCHAIN_EXTENSION_NAME
@@ -469,15 +455,9 @@ bool VkmInitialize()
     vkDeviceCreateInfo.enabledExtensionCount = ARRAY_COUNT(deviceExtensions);
     vkDeviceCreateInfo.ppEnabledExtensionNames = deviceExtensions;
     vkDeviceCreateInfo.pEnabledFeatures = nullptr;
-    vkResult = vkCreateDevice(vkm.physicalDevice, &vkDeviceCreateInfo, nullptr, &vkm.vkDevice);
+    VK_CALL(vkCreateDevice(vkm.physicalDevice, &vkDeviceCreateInfo, nullptr, &vkm.vkDevice), "Could not create logical device");
 
     vkm.pfnSetDebugUtilsObjectNameEXT = (PFN_vkSetDebugUtilsObjectNameEXT) vkGetDeviceProcAddr(vkm.vkDevice, "vkSetDebugUtilsObjectNameEXT");
-
-    if (vkResult != VK_SUCCESS)
-    {
-        OutputDebugString("Could not create logical device\n");
-        return false;
-    }
 
     vkGetDeviceQueue(vkm.vkDevice, vkm.graphicsQueueIndex, 0, &vkm.graphicsQueue);
     vkGetDeviceQueue(vkm.vkDevice, vkm.presentQueueIndex, 0, &vkm.presentQueue);
@@ -494,14 +474,14 @@ bool VkmInitialize()
     }
 
     u32 surfaceFormatCount = 0;
-    vkResult = vkGetPhysicalDeviceSurfaceFormatsKHR(vkm.physicalDevice, vkm.surface, &surfaceFormatCount, nullptr);
-    if (vkResult != VK_SUCCESS || surfaceFormatCount == 0)
+    VK_CALL(vkGetPhysicalDeviceSurfaceFormatsKHR(vkm.physicalDevice, vkm.surface, &surfaceFormatCount, nullptr), "Could not get surface formats");
+    if (surfaceFormatCount == 0)
     {
         OutputDebugString("Could not get surface formats\n");
         return false;
     }
     VkSurfaceFormatKHR* surfaceFormats = new VkSurfaceFormatKHR[surfaceFormatCount];
-    vkResult = vkGetPhysicalDeviceSurfaceFormatsKHR(vkm.physicalDevice, vkm.surface, &surfaceFormatCount, surfaceFormats);
+    VK_CALL(vkGetPhysicalDeviceSurfaceFormatsKHR(vkm.physicalDevice, vkm.surface, &surfaceFormatCount, surfaceFormats), "Could not get surface formats");
 
     bool foundGoodSurfaceFormat = false;
     for (u32 i = 0; i < surfaceFormatCount; i++)
@@ -526,8 +506,8 @@ bool VkmInitialize()
     }
 
     st shaderFileSize = 0;
-    bool nVkResult = ReadEntireFile("slang.spv", &vkm.shaderFileBytes, &shaderFileSize);
-    if (!nVkResult)
+    
+    if (!ReadEntireFile("slang.spv", &vkm.shaderFileBytes, &shaderFileSize))
     {
         OutputDebugString("Failed to read shader file\n");
         return false;
@@ -540,12 +520,7 @@ bool VkmInitialize()
     shaderModuleCreateInfo.codeSize = shaderFileSize;
     shaderModuleCreateInfo.pCode = (u32*)vkm.shaderFileBytes;
 
-    vkResult = vkCreateShaderModule(vkm.vkDevice, &shaderModuleCreateInfo, nullptr, &vkm.shaderModule);
-    if (vkResult != VK_SUCCESS)
-    {
-        OutputDebugString("Failed to create shader module\n");
-        return false;
-    }
+    VK_CALL(vkCreateShaderModule(vkm.vkDevice, &shaderModuleCreateInfo, nullptr, &vkm.shaderModule), "Failed to create shader module");
 
     VkDescriptorSetLayoutBinding descriptorSetBindings[2] = {};
     descriptorSetBindings[0].binding = 0;
@@ -565,12 +540,7 @@ bool VkmInitialize()
     setLayoutCreateInfo.bindingCount = 2;
     setLayoutCreateInfo.pBindings = descriptorSetBindings;
     VkDescriptorSetLayout descriptorSetLayout = VK_NULL_HANDLE; 
-    vkResult = vkCreateDescriptorSetLayout(vkm.vkDevice, &setLayoutCreateInfo, nullptr, &descriptorSetLayout);
-    if (vkResult != VK_SUCCESS)
-    {
-        OutputDebugString("Could not create descriptor set.");
-        return false;
-    }
+    VK_CALL(vkCreateDescriptorSetLayout(vkm.vkDevice, &setLayoutCreateInfo, nullptr, &descriptorSetLayout), "Could not create descriptor set.");
     for (u32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
     {
         vkm.descriptorSetLayouts[i] = descriptorSetLayout;
@@ -695,12 +665,7 @@ bool VkmInitialize()
     pipelineLayoutCreateInfo.pSetLayouts = &descriptorSetLayout;
     pipelineLayoutCreateInfo.pushConstantRangeCount = 0;
     pipelineLayoutCreateInfo.pPushConstantRanges = nullptr;
-    vkResult = vkCreatePipelineLayout(vkm.vkDevice, &pipelineLayoutCreateInfo, nullptr, &vkm.pipelineLayout);
-    if (vkResult != VK_SUCCESS)
-    {
-        OutputDebugString("Could not create pipeline layout");
-        return false;
-    }
+    VK_CALL(vkCreatePipelineLayout(vkm.vkDevice, &pipelineLayoutCreateInfo, nullptr, &vkm.pipelineLayout), "Could not create pipeline layout");
 
     VkPipelineRenderingCreateInfo pipelineRenderingCreateInfo = {};
     pipelineRenderingCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
@@ -732,24 +697,14 @@ bool VkmInitialize()
     graphicsPipelineCreateInfo.basePipelineHandle = VK_NULL_HANDLE;
     graphicsPipelineCreateInfo.basePipelineIndex = -1;
 
-    vkResult = vkCreateGraphicsPipelines(vkm.vkDevice, VK_NULL_HANDLE, 1, &graphicsPipelineCreateInfo, nullptr, &vkm.graphicsPipeline);
-    if (vkResult != VK_SUCCESS)
-    {
-        OutputDebugString("Could not create graphics pipeline");
-        return false;
-    }
+    VK_CALL(vkCreateGraphicsPipelines(vkm.vkDevice, VK_NULL_HANDLE, 1, &graphicsPipelineCreateInfo, nullptr, &vkm.graphicsPipeline), "Could not create graphics pipeline");
 
     VkCommandPoolCreateInfo commandPoolCreateInfo = {};
     commandPoolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
     commandPoolCreateInfo.pNext = nullptr;
     commandPoolCreateInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
     commandPoolCreateInfo.queueFamilyIndex = vkm.graphicsQueueIndex;
-    vkResult = vkCreateCommandPool(vkm.vkDevice, &commandPoolCreateInfo, nullptr, &vkm.commandPool);
-    if (vkResult != VK_SUCCESS)
-    {
-        OutputDebugString("Could not create command pool");
-        return false;
-    }
+    VK_CALL(vkCreateCommandPool(vkm.vkDevice, &commandPoolCreateInfo, nullptr, &vkm.commandPool), "Could not create command pool");
         
     VkCommandBufferAllocateInfo commandBufferAllocateInfo = {};
     commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -758,12 +713,7 @@ bool VkmInitialize()
     commandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     commandBufferAllocateInfo.commandBufferCount = MAX_FRAMES_IN_FLIGHT;
     
-    vkResult = vkAllocateCommandBuffers(vkm.vkDevice, &commandBufferAllocateInfo, vkm.commandBuffers);
-    if (vkResult != VK_SUCCESS)
-    {
-        OutputDebugString("Failed to allocate command buffer.");
-        return false;
-    }
+    VK_CALL(vkAllocateCommandBuffers(vkm.vkDevice, &commandBufferAllocateInfo, vkm.commandBuffers), "Failed to allocate command buffer");
 
     u32 uniformBufferSize = sizeof(UniformBufferObject);
     for (u32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
@@ -910,8 +860,6 @@ bool VkmInitialize()
         }
     }
 
-    // VkImageViewCreateInfo textureImageViewCreateInfo = {};
-    // textureImageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     // textureImageViewCreateInfo.pNext = nullptr;
     // textureImageViewCreateInfo.flags;
     // VkImage                    textureImageViewCreateInfo.image;
@@ -942,68 +890,10 @@ bool VkmCreateImageView(VkImage* image, VkFormat format, VkImageView* imageView)
     imageViewCreateInfo.subresourceRange.baseArrayLayer = 0;
     imageViewCreateInfo.subresourceRange.layerCount = 1;
 
-    VkResult vkResult = vkCreateImageView(vkm.vkDevice, &imageViewCreateInfo, nullptr, imageView);
-    if (vkResult != VK_SUCCESS)
-    {
-        OutputDebugString("Failed to create image view.");
-        return false;
-    }
+    VK_CALL(vkCreateImageView(vkm.vkDevice, &imageViewCreateInfo, nullptr, imageView), "Failed to create image view");
 
     return true;
 }
-// void VkmCopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size)
-// {
-//     VkCommandBufferAllocateInfo commandBufferAllocateInfo = {};
-//     commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-//     commandBufferAllocateInfo.pNext = nullptr;
-//     commandBufferAllocateInfo.commandPool = vkm.commandPool;
-//     commandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-//     commandBufferAllocateInfo.commandBufferCount = 1;
-
-//     VkCommandBuffer commandCopyBuffer;
-//     VkResult result = vkAllocateCommandBuffers(vkm.vkDevice, &commandBufferAllocateInfo, &commandCopyBuffer);
-//     if (result != VK_SUCCESS) 
-//     {
-//         OutputDebugString("Could not allocate temp command buffer");
-//         return;
-//     }
-
-//     VkCommandBufferBeginInfo beginInfo = {};
-//     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-//     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT; 
-//     beginInfo.pInheritanceInfo = nullptr; 
-
-//     result = vkBeginCommandBuffer(commandCopyBuffer, &beginInfo);
-//     if (result != VK_SUCCESS)
-//     {
-//         OutputDebugString("Could not begin command buffer");
-//         return;
-//     }
-
-//     VkBufferCopy copyRegion = {};
-//     copyRegion.srcOffset = 0;
-//     copyRegion.dstOffset = 0;
-//     copyRegion.size = size;
-
-//     vkCmdCopyBuffer(commandCopyBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
-
-//     result = vkEndCommandBuffer(commandCopyBuffer);
-//     if (result != VK_SUCCESS)
-//     {
-//         OutputDebugString("Could not end command buffer");
-//         return;
-//     }
-
-//     VkSubmitInfo submitInfo = {};
-//     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-//     submitInfo.commandBufferCount = 1;
-//     submitInfo.pCommandBuffers = &commandCopyBuffer;
-
-//     vkQueueSubmit(vkm.graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
-//     vkQueueWaitIdle(vkm.graphicsQueue);
-
-//     vkFreeCommandBuffers(vkm.vkDevice, vkm.commandPool, 1, &commandCopyBuffer);
-// }
 
 bool VkmBeginSingleTimeCommands(VkCommandBuffer* commandBuffer)
 {
@@ -1015,12 +905,7 @@ bool VkmBeginSingleTimeCommands(VkCommandBuffer* commandBuffer)
     allocInfo.commandBufferCount = 1;
 
     *commandBuffer = VK_NULL_HANDLE;
-    VkResult vkResult = vkAllocateCommandBuffers(vkm.vkDevice, &allocInfo, commandBuffer);
-    if (vkResult != VK_SUCCESS)
-    {
-        OutputDebugString("Could not allocate for command buffer\n");
-        return false;
-    }
+    VK_CALL(vkAllocateCommandBuffers(vkm.vkDevice, &allocInfo, commandBuffer), "Could not allocate for command buffer");
 
     VkCommandBufferBeginInfo beginInfo = {};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -1028,12 +913,7 @@ bool VkmBeginSingleTimeCommands(VkCommandBuffer* commandBuffer)
     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     beginInfo.pInheritanceInfo = nullptr;
 
-    vkResult = vkBeginCommandBuffer(*commandBuffer, &beginInfo);
-    if (vkResult != VK_SUCCESS) 
-    {
-        OutputDebugString("Could start for command buffer\n");
-        return VK_NULL_HANDLE;
-    }
+    VK_CALL(vkBeginCommandBuffer(*commandBuffer, &beginInfo), "Could not begin command buffer");
     
     return true;
 }
@@ -1199,12 +1079,7 @@ bool VkmCreateAndFillBuffer(VkDeviceSize size, void* data, VkBufferUsageFlags us
 
     // vkBindBufferMemory(vkm.vkDevice, *buffer, *bufferMemory, 0);
     void* mappedMemory = nullptr;
-    VkResult vkResult = vkMapMemory(vkm.vkDevice, *bufferMemory, 0, size, 0, &mappedMemory);
-    if (vkResult != VK_SUCCESS)
-    {
-        OutputDebugString("Could not map staging memory.");
-        return false;
-    }
+    VK_CALL(vkMapMemory(vkm.vkDevice, *bufferMemory, 0, size, 0, &mappedMemory), "Could not map staging memory");
     memcpy(mappedMemory, data, size);
     vkUnmapMemory(vkm.vkDevice, *bufferMemory);
     return true;
@@ -1221,12 +1096,7 @@ bool VkmCreateBuffer(VkDeviceSize size, VkBufferUsageFlags usageFlags, VkMemoryP
     bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     bufferInfo.queueFamilyIndexCount = 0;
     bufferInfo.pQueueFamilyIndices = nullptr;
-    VkResult vkResult = vkCreateBuffer(vkm.vkDevice, &bufferInfo, nullptr, buffer);
-    if (vkResult != VK_SUCCESS)
-    {
-        OutputDebugString("Could not create buffer\n");
-        return false;
-    }
+    VK_CALL(vkCreateBuffer(vkm.vkDevice, &bufferInfo, nullptr, buffer), "Could not create buffer");
 
     VkMemoryRequirements memRequirements = {};
     vkGetBufferMemoryRequirements(vkm.vkDevice, *buffer, &memRequirements);
@@ -1241,13 +1111,7 @@ bool VkmCreateBuffer(VkDeviceSize size, VkBufferUsageFlags usageFlags, VkMemoryP
         OutputDebugString("Could not find suitable memory type in physical device\n");
         return false;
     }
-    vkResult = vkAllocateMemory(vkm.vkDevice, &memoryAllocateInfo, nullptr, bufferMemory);
-
-    if (vkResult != VK_SUCCESS)
-    {
-        OutputDebugString("Could not allocate memory\n");
-        return false;
-    }
+    VK_CALL(vkAllocateMemory(vkm.vkDevice, &memoryAllocateInfo, nullptr, bufferMemory), "Could not allocate memory");
 
     vkBindBufferMemory(vkm.vkDevice, *buffer, *bufferMemory, 0);
     return true;
@@ -1292,12 +1156,7 @@ bool VkmRecreateSwapChain()
     }
     
     vkDeviceWaitIdle(vkm.vkDevice);
-    VkResult vkResult = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(vkm.physicalDevice, vkm.surface, &vkm.surfaceCapabilities);
-    if (vkResult != VK_SUCCESS)
-    {
-        OutputDebugString("Could not get physical device surface capabilities\n");
-        return false;
-    }
+    VK_CALL(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(vkm.physicalDevice, vkm.surface, &vkm.surfaceCapabilities), "Could not get physical device surface capabilities");
 
     if (vkm.surfaceCapabilities.currentExtent.width != UINT32_MAX)
     {
@@ -1348,26 +1207,16 @@ bool VkmRecreateSwapChain()
         swapChainCreateInfo.pQueueFamilyIndices = queueFamilyIndices;
     }
 
-    vkResult = vkCreateSwapchainKHR(vkm.vkDevice, &swapChainCreateInfo, nullptr, &vkm.swapChain);
-    if (vkResult != VK_SUCCESS)
-    {
-        OutputDebugString("Could not create swap chain.\n");
-        return false;
-    }
+    VK_CALL(vkCreateSwapchainKHR(vkm.vkDevice, &swapChainCreateInfo, nullptr, &vkm.swapChain), "Could not create swap chain");
 
     if (oldSwapChain != VK_NULL_HANDLE && oldSwapChain != vkm.swapChain)
     {
         vkDestroySwapchainKHR(vkm.vkDevice, oldSwapChain, nullptr);
     }
 
-    vkResult = vkGetSwapchainImagesKHR(vkm.vkDevice, vkm.swapChain, &vkm.swapChainImagesCount, nullptr);
-    if (vkResult != VK_SUCCESS || vkm.swapChainImagesCount == 0)
-    {
-        OutputDebugString("Could not determine amount of swap chain images.\n");
-        return false;
-    }
+    VK_CALL(vkGetSwapchainImagesKHR(vkm.vkDevice, vkm.swapChain, &vkm.swapChainImagesCount, nullptr), "Could not determine amount of swap chain images");
     vkm.swapChainImages = new VkImage[vkm.swapChainImagesCount];
-    vkResult = vkGetSwapchainImagesKHR(vkm.vkDevice, vkm.swapChain, &vkm.swapChainImagesCount, vkm.swapChainImages);
+    VK_CALL(vkGetSwapchainImagesKHR(vkm.vkDevice, vkm.swapChain, &vkm.swapChainImagesCount, vkm.swapChainImages), "Could not fill get swap chain images");
     vkm.swapChainImageFormat = vkm.surfaceFormat.format;
     vkm.swapChainExtent = vkm.extent;
 
@@ -1394,15 +1243,6 @@ bool VkmRecreateSwapChain()
     vkm.swapChainImageViews = new VkImageView[vkm.swapChainImagesCount];
     for (u32 i = 0; i < vkm.swapChainImagesCount; i++)
     {
-        // VkImage currentImage = vkm.swapChainImages[i];
-        // imageViewCreateInfo.image = currentImage;
-
-        //  vkResult = vkCreateImageView(vkm.vkDevice, &imageViewCreateInfo, nullptr, &vkm.swapChainImageViews[i]);
-        //  if (vkResult != VK_SUCCESS)
-        //  {
-        //     OutputDebugString("Failed to create an image view for swap buffer image");
-        //     return false;
-        //  }
         VkmCreateImageView(&vkm.swapChainImages[i], vkm.swapChainImageFormat, &vkm.swapChainImageViews[i]);
     }
 
@@ -1416,13 +1256,9 @@ VkCommandBuffer VkmGetInFlightCommandBuffer()
 
 bool VkmSetupForFrameRendering(VkCommandBuffer commandBuffer)
 {
-    VkResult vkResult = vkWaitForFences(vkm.vkDevice, 1, &vkm.frameFences[vkm.currentFrameInFlightIndex], VK_TRUE, UINT64_MAX);
-    if (vkResult != VK_SUCCESS)
-    {
-        OutputDebugString("Failed to wait for fetch");
-    }
+    VK_CALL(vkWaitForFences(vkm.vkDevice, 1, &vkm.frameFences[vkm.currentFrameInFlightIndex], VK_TRUE, UINT64_MAX), "Failed to wait for fence");
     
-    vkResult = vkAcquireNextImageKHR(vkm.vkDevice, vkm.swapChain, UINT64_MAX, vkm.acquireSemaphores[vkm.currentFrameInFlightIndex], VK_NULL_HANDLE, &vkm.imageIndex);
+    VkResult vkResult = vkAcquireNextImageKHR(vkm.vkDevice, vkm.swapChain, UINT64_MAX, vkm.acquireSemaphores[vkm.currentFrameInFlightIndex], VK_NULL_HANDLE, &vkm.imageIndex);
     if (vkResult == VK_ERROR_OUT_OF_DATE_KHR)
     {
         VkmRecreateSwapChain();
@@ -1650,7 +1486,7 @@ bool VkmCreateTextureImage()
     imageCreateInfo.pQueueFamilyIndices = (u32*)&vkm.graphicsQueueIndex;
     imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
-    vkCreateImage(vkm.vkDevice, &imageCreateInfo, nullptr, &vkm.textureImage);
+    VK_CALL(vkCreateImage(vkm.vkDevice, &imageCreateInfo, nullptr, &vkm.textureImage), "Could not create image");
 
     VkMemoryRequirements memRequirements = {};
     vkGetImageMemoryRequirements(vkm.vkDevice, vkm.textureImage, &memRequirements);
@@ -1664,13 +1500,8 @@ bool VkmCreateTextureImage()
         OutputDebugString("Could not find suitable memory type in physical device\n");
         return false;
     }
-    VkResult vkResult = vkAllocateMemory(vkm.vkDevice, &memoryAllocateInfo, nullptr, &vkm.textureImageMemory);
+    VK_CALL(vkAllocateMemory(vkm.vkDevice, &memoryAllocateInfo, nullptr, &vkm.textureImageMemory), "Could not allocate memory");
 
-    if (vkResult != VK_SUCCESS)
-    {
-        OutputDebugString("Could not allocate for texture memory\n");
-        return false;
-    }
     vkBindImageMemory(vkm.vkDevice, vkm.textureImage, vkm.textureImageMemory, 0);
 
     VkmTransitionImageLayout(&vkm.textureImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
@@ -1682,107 +1513,6 @@ bool VkmCreateTextureImage()
     
     return true;
 }
-
-
-//      VkInstance vkInstance;
-//     VkDebugUtilsMessengerEXT vKDebugUtilsMessengerExt;
-//     PFN_vkDestroyDebugUtilsMessengerEXT pfnDestroyDebugUtilsMessengerEXT;
-//     char* shaderFileBytes;
-//     VkPhysicalDevice physicalDevice;
-    
-//     VkDevice vkDevice;
-//     VkSurfaceCapabilitiesKHR surfaceCapabilities; 
-//     VkSurfaceKHR surface;
-//     VkSurfaceFormatKHR surfaceFormat;
-//     VkExtent2D extent;
-    
-//     VkSwapchainKHR swapChain;
-//     VkFormat swapChainImageFormat;
-//     u32 swapChainImagesCount;
-//     u32 imageCount;
-//     VkImage* swapChainImages;
-//     VkImageView* swapChainImageViews;
-//     VkExtent2D swapChainExtent;
-//     VkPresentModeKHR presentMode;
-//     bool framebufferResized;
-//     u32 imageIndex;
-
-//     VkPipeline graphicsPipeline;
-//     VkShaderModule shaderModule;
-    
-//     VkBuffer uniformBuffers[MAX_FRAMES_IN_FLIGHT];
-//     VkDeviceMemory uniformBuffersMemory[MAX_FRAMES_IN_FLIGHT];
-//     void* uniformBuffersMapped[MAX_FRAMES_IN_FLIGHT];
-//     VkDescriptorPool descriptorPool;
-//     VkDescriptorSetLayout descriptorSetLayouts[MAX_FRAMES_IN_FLIGHT];
-//     VkDescriptorSet descriptorSets[MAX_FRAMES_IN_FLIGHT];
-    
-//     VkCommandPool commandPool;
-//     VkCommandBuffer commandBuffers[MAX_FRAMES_IN_FLIGHT];
-//     s32 graphicsQueueIndex = -1;
-//     s32 presentQueueIndex = -1; 
-//     VkQueue graphicsQueue;
-//     VkQueue presentQueue;
-//     VkPipelineLayout pipelineLayout;
-
-//     VkSemaphore acquireSemaphores[MAX_FRAMES_IN_FLIGHT];
-//     VkFence frameFences[MAX_FRAMES_IN_FLIGHT];
-//     VkSemaphore* submitSemaphores;
-//     u32 currentFrameInFlightIndex;
-
-//     VkImage textureImage;
-//     VkDeviceMemory textureImageMemory;
-//     VkImageView textureImageView;
-//     VkSampler textureSampler;
-
-// void VkmCleanUp()
-// {
-//     if (vkm.vkDevice != VK_NULL_HANDLE)
-//         vkDeviceWaitIdle(vkm.vkDevice);
-
-//     for (u32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
-//     {
-//         if (vkm.uniformBuffers[i] != VK_NULL_HANDLE)
-//             vkDestroyBuffer(vkm.vkDevice, vkm.uniformBuffers[i], nullptr);
-//         if (vkm.uniformBuffersMemory[i] != VK_NULL_HANDLE)
-//             vkFreeMemory(vkm.vkDevice, vkm.uniformBuffersMemory[i], nullptr);
-//     }
-
-//     for (u32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
-//     {
-//         if (vkm.acquireSemaphores[i] != VK_NULL_HANDLE)
-//             vkDestroySemaphore(vkm.vkDevice, vkm.acquireSemaphores[i], nullptr);
-//         if (vkm.frameFences[i] != VK_NULL_HANDLE)
-//             vkDestroyFence(vkm.vkDevice, vkm.frameFences[i], nullptr);
-//     }
-//     for (u32 i = 0; i < vkm.swapChainImagesCount; i++)
-//     {
-//         if (vkm.submitSemaphores[i] != VK_NULL_HANDLE)
-//             vkDestroySemaphore(vkm.vkDevice, vkm.submitSemaphores[i], nullptr);
-//     }
-//     vkDestroyPipeline(vkm.vkDevice, vkm.graphicsPipeline, nullptr);
-//     vkDestroyPipelineLayout(vkm.vkDevice, vkm.pipelineLayout, nullptr);
-//     vkDestroyCommandPool(vkm.vkDevice, vkm.commandPool, nullptr);
-//     vkDestroyShaderModule(vkm.vkDevice, vkm.shaderModule, nullptr);
-//     if (vkm.swapChainImageViews)
-//     {
-//         for (u32 i = 0; i < vkm.swapChainImagesCount; i++)
-//         {
-//             if (vkm.swapChainImageViews[i] != VK_NULL_HANDLE)
-//                 vkDestroyImageView(vkm.vkDevice, vkm.swapChainImageViews[i], nullptr);
-//         }
-//     }
-//     if (vkm.swapChain != VK_NULL_HANDLE)
-//          vkDestroySwapchainKHR(vkm.vkDevice, vkm.swapChain, nullptr);
-//     vkDestroyDevice(vkm.vkDevice, NULL);
-//     vkDestroySurfaceKHR(vkm.vkInstance, vkm.surface, NULL);
-//     // pfnDestroyDebugUtilsMessengerEXT(vkm.vkInstance, vKDebugUtilsMessengerExt, NULL);
-//     vkDestroyInstance(vkm.vkInstance, NULL);
-
-//     delete[] vkm.swapChainImageViews;
-//     delete[] vkm.swapChainImages;
-//     delete[] vkm.shaderFileBytes;
-// }
 
 void VkmCleanUp()
 {

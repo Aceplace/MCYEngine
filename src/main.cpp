@@ -19,18 +19,18 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
     RegisterClassA(&wc);
 
     _hwnd = CreateWindowExA(
-        0,                              // Optional window styles.
-        CLASS_NAME,                     // Window class
-        "Learn to Program Windows",    // Window text
-        WS_OVERLAPPEDWINDOW,            // Window style
+        0,                             
+        CLASS_NAME,                    
+        "Learn to Program Windows",    
+        WS_OVERLAPPEDWINDOW,           
 
         // Size and position
         CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
 
-        NULL,       // Parent window    
-        NULL,       // Menu
-        hInstance,  // Instance handle
-        NULL        // Additional application data
+        NULL,      
+        NULL,      
+        hInstance, 
+        NULL       
         );
 
     if (_hwnd == NULL)
@@ -43,13 +43,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
         OutputDebugString("Could not intiialize Vulkan");
         return -1;
     }
-
-    // const Vertex vertices[] = {
-    //     {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-    //     {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
-    //     {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
-    //     {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
-    // };
 
     const Vertex vertices[] = {
         {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
@@ -80,11 +73,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
     }
     VkmCopyBuffer(stagingBufferForVertices, vertexBuffer, vertexBufferSize);
 
-    VkmAttachNameToObject((u64)stagingBufferForVertices, VK_OBJECT_TYPE_BUFFER, "vertex buffer stage buffer");
-    VkmAttachNameToObject((u64)stagingBufferForVerticesMemory, VK_OBJECT_TYPE_DEVICE_MEMORY, "vertex buffer stage buffer memory");
-    VkmAttachNameToObject((u64)vertexBuffer, VK_OBJECT_TYPE_BUFFER, "vertex buffer buffer");
-    VkmAttachNameToObject((u64)vertexBufferForVerticesMemory, VK_OBJECT_TYPE_DEVICE_MEMORY, "vertex buffer buffer memory");
-    
     VkBuffer stagingBufferForIndices = VK_NULL_HANDLE;
     VkDeviceMemory stagingBufferForIndicesMemory = VK_NULL_HANDLE;
     VkBuffer indexBuffer = VK_NULL_HANDLE;
@@ -102,11 +90,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
         return false;
     }
     VkmCopyBuffer(stagingBufferForIndices, indexBuffer, indexBufferSize);
-
-    VkmAttachNameToObject((u64)stagingBufferForIndices, VK_OBJECT_TYPE_BUFFER, "index buffer stage buffer");
-    VkmAttachNameToObject((u64)stagingBufferForIndicesMemory, VK_OBJECT_TYPE_DEVICE_MEMORY, "index buffer stage buffer memory");
-    VkmAttachNameToObject((u64)indexBuffer, VK_OBJECT_TYPE_BUFFER, "index buffer buffer");
-    VkmAttachNameToObject((u64)indexBufferMemory, VK_OBJECT_TYPE_DEVICE_MEMORY, "index buffer buffer memory");
 
     ShowWindow(_hwnd, nCmdShow);        
     MSG msg = { };
@@ -172,8 +155,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
     vkDestroyBuffer(vkm.vkDevice, stagingBufferForIndices, nullptr);
     vkFreeMemory(vkm.vkDevice, stagingBufferForIndicesMemory, nullptr);
     VkmCleanUp();
-    
-    OutputDebugString("Cleaned up Vulkan");
 
     return 0;
 }
