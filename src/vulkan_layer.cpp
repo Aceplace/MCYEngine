@@ -10,7 +10,7 @@
 
 struct Vertex
 {
-    glm::vec2 pos;
+    glm::vec3 pos;
     glm::vec3 color;
     glm::vec2 texCoord;
 };
@@ -38,7 +38,7 @@ VkVertexInputAttributeDescription* VertexGetInputAttributeDescription()
     result[0] = {};
     result[0].location = 0;
     result[0].binding = 0;
-    result[0].format = VK_FORMAT_R32G32_SFLOAT;
+    result[0].format = VK_FORMAT_R32G32B32_SFLOAT;
     result[0].offset = offsetof(Vertex, pos);
     
     result[1] = {};
@@ -95,6 +95,10 @@ struct VkMState
     bool framebufferResized;
     u32 imageIndex;
 
+    // VkImage depthImage;
+    // VkDeviceMemory depthImageMemory;
+    // VkImageView depthImageView;
+
     VkPipeline graphicsPipeline;
     VkShaderModule shaderModule;
     
@@ -131,8 +135,11 @@ bool VkmCreateAndFillBuffer(VkDeviceSize size, void* data, VkBufferUsageFlags us
 bool VkmCreateBuffer(VkDeviceSize size, VkBufferUsageFlags usageFlags, VkMemoryPropertyFlags memoryPropertyFlags, VkBuffer* buffer, VkDeviceMemory* bufferMemory);
 bool VkmRecreateSwapChain();
 bool VkmCreateTextureImage();
-bool VkmCreateTextureImage();
-bool VkmCreateImageView(VkImage* image, VkFormat format, VkImageView* imageView);
+bool VkmCreateImageView(VkImage* image, VkFormat format, VkImageView* imageView, VkImageAspectFlags aspectFlags);
+bool FindSupportedFormat(int candidateCount, VkFormat* candidates, VkImageTiling tiling, VkFormatFeatureFlags features, VkFormat* format);
+bool FindDepthFormat(VkFormat* format);
+bool HasStencilComponent(VkFormat format);
+bool VkmCreateImage(u32 width, u32 height, VkFormat format, VkImage* image, VkDeviceMemory* imageMemory);
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL VkmDebgCallback(
     VkDebugUtilsMessageSeverityFlagBitsEXT   messageSeverity,
@@ -505,6 +512,19 @@ bool VkmInitialize()
         return false;
     }
 
+    // VkFormat depthFormat;
+    // FindDepthFormat(&depthFormat);
+    // if (!VkmCreateImage(vkm.swapChainExtent.width, vkm.swapChainExtent.height, depthFormat, &vkm.depthImage, &vkm.depthImageMemory))
+    // {
+    //     OutputDebugString("Failed to create depth image\n");
+    //     return false;
+    // }
+    // if (!VkmCreateImageView(&vkm.depthImage, depthFormat, &vkm.depthImageView, VK_IMAGE_ASPECT_DEPTH_BIT))
+    // {
+    //     OutputDebugString("Failed to depth image view\n");
+    //     return false;
+    // }
+    
     st shaderFileSize = 0;
     
     if (!ReadEntireFile("slang.spv", &vkm.shaderFileBytes, &shaderFileSize))
@@ -741,7 +761,7 @@ bool VkmInitialize()
         return false;
     }
 
-    if (!VkmCreateImageView(&vkm.textureImage, VK_FORMAT_R8G8B8A8_SRGB, &vkm.textureImageView))
+    if (!VkmCreateImageView(&vkm.textureImage, VK_FORMAT_R8G8B8A8_SRGB, &vkm.textureImageView, VK_IMAGE_ASPECT_COLOR_BIT))
     {
         OutputDebugString("Could not create texture image view");
         return false;
@@ -871,7 +891,7 @@ bool VkmInitialize()
     return true;
 }
 
-bool VkmCreateImageView(VkImage* image, VkFormat format, VkImageView* imageView)
+bool VkmCreateImageView(VkImage* image, VkFormat format, VkImageView* imageView, VkImageAspectFlags aspectFlags)
 {
     VkImageViewCreateInfo imageViewCreateInfo = {};
     imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -884,7 +904,7 @@ bool VkmCreateImageView(VkImage* image, VkFormat format, VkImageView* imageView)
     imageViewCreateInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
     imageViewCreateInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
     imageViewCreateInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-    imageViewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    imageViewCreateInfo.subresourceRange.aspectMask = aspectFlags;
     imageViewCreateInfo.subresourceRange.baseMipLevel = 0;
     imageViewCreateInfo.subresourceRange.levelCount = 1;
     imageViewCreateInfo.subresourceRange.baseArrayLayer = 0;
@@ -957,7 +977,10 @@ bool VkmCopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size)
     return true;
 }
 
-bool VkmTransitionImageLayout(VkImage *image, VkImageLayout oldLayout, VkImageLayout newLayout)
+bool VkmTransitionImageLayout(VkImage *image, 
+    VkImageLayout oldLayout, 
+    VkImageLayout newLayout, 
+    VkImageAspectFlags imageAspectFlags)
 {
     VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
     if (!VkmBeginSingleTimeCommands(&commandBuffer))
@@ -972,23 +995,21 @@ bool VkmTransitionImageLayout(VkImage *image, VkImageLayout oldLayout, VkImageLa
     barrier.dstAccessMask = 0;
     barrier.oldLayout = oldLayout;
     barrier.newLayout = newLayout;
-    barrier.srcQueueFamilyIndex = 0;
-    barrier.dstQueueFamilyIndex = 0;
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     barrier.image = *image;
-    VkImageSubresourceRange subresourceRange = {};
-    subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    subresourceRange.baseMipLevel = 0;
-    subresourceRange.levelCount = 1;
-    subresourceRange.baseArrayLayer = 0;
-    subresourceRange.layerCount = 1;
-    barrier.subresourceRange = subresourceRange;
+    barrier.subresourceRange.aspectMask = imageAspectFlags;
+    barrier.subresourceRange.baseMipLevel = 0;
+    barrier.subresourceRange.levelCount = 1;
+    barrier.subresourceRange.baseArrayLayer = 0;
+    barrier.subresourceRange.layerCount = 1;
 
     VkPipelineStageFlags sourceStage = 0;
     VkPipelineStageFlags destinationStage = 0;
 
     if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
     {
-        barrier.srcAccessMask = {};
+        barrier.srcAccessMask = 0;
         barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
 
         sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
@@ -1001,6 +1022,14 @@ bool VkmTransitionImageLayout(VkImage *image, VkImageLayout oldLayout, VkImageLa
 
         sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
         destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    }
+    else if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+    {
+        barrier.srcAccessMask = 0;
+        barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
+
+        sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+        destinationStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
     }
     else
     {
@@ -1243,7 +1272,7 @@ bool VkmRecreateSwapChain()
     vkm.swapChainImageViews = new VkImageView[vkm.swapChainImagesCount];
     for (u32 i = 0; i < vkm.swapChainImagesCount; i++)
     {
-        VkmCreateImageView(&vkm.swapChainImages[i], vkm.swapChainImageFormat, &vkm.swapChainImageViews[i]);
+        VkmCreateImageView(&vkm.swapChainImages[i], vkm.swapChainImageFormat, &vkm.swapChainImageViews[i], VK_IMAGE_ASPECT_COLOR_BIT);
     }
 
     return true;
@@ -1319,17 +1348,32 @@ bool VkmSetupForFrameRendering(VkCommandBuffer commandBuffer)
     clearColor.color.float32[1] = 0.0f;
     clearColor.color.float32[2] = 0.0f;
     clearColor.color.float32[3] = 1.0f;
-    VkRenderingAttachmentInfo attachmentInfo = {};
-    attachmentInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-    attachmentInfo.pNext = nullptr;
-    attachmentInfo.imageView = vkm.swapChainImageViews[vkm.imageIndex];
-    attachmentInfo.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    attachmentInfo.resolveMode = VK_RESOLVE_MODE_NONE;
-    attachmentInfo.resolveImageView = VK_NULL_HANDLE;
-    attachmentInfo.resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    attachmentInfo.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    attachmentInfo.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    attachmentInfo.clearValue = clearColor;    
+    VkClearValue clearDepth = {};
+    clearDepth.depthStencil.depth = 1;
+    
+    VkRenderingAttachmentInfo colorAttachmentInfo = {};
+    colorAttachmentInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+    colorAttachmentInfo.pNext = nullptr;
+    colorAttachmentInfo.imageView = vkm.swapChainImageViews[vkm.imageIndex];
+    colorAttachmentInfo.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    colorAttachmentInfo.resolveMode = VK_RESOLVE_MODE_NONE;
+    colorAttachmentInfo.resolveImageView = VK_NULL_HANDLE;
+    colorAttachmentInfo.resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    colorAttachmentInfo.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    colorAttachmentInfo.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    colorAttachmentInfo.clearValue = clearColor;  
+    
+    // VkRenderingAttachmentInfo depthAttachmentInfo = {};
+    // depthAttachmentInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+    // depthAttachmentInfo.pNext = nullptr;
+    // depthAttachmentInfo.imageView = vkm.depthImageView;
+    // depthAttachmentInfo.imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
+    // depthAttachmentInfo.resolveMode = VK_RESOLVE_MODE_NONE;
+    // depthAttachmentInfo.resolveImageView = VK_NULL_HANDLE;
+    // depthAttachmentInfo.resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    // depthAttachmentInfo.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    // depthAttachmentInfo.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    // depthAttachmentInfo.clearValue = clearDepth;
 
     VkRenderingInfo renderingInfo = {};
     renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
@@ -1343,7 +1387,7 @@ bool VkmSetupForFrameRendering(VkCommandBuffer commandBuffer)
     renderingInfo.layerCount = 1;
     renderingInfo.viewMask = 0;
     renderingInfo.colorAttachmentCount = 1;
-    renderingInfo.pColorAttachments = &attachmentInfo;
+    renderingInfo.pColorAttachments = &colorAttachmentInfo;
     renderingInfo.pDepthAttachment = nullptr;
     renderingInfo.pStencilAttachment = nullptr;
 
@@ -1448,6 +1492,47 @@ bool VkmEndRenderingAndSetupForPresent(VkCommandBuffer commandBuffer)
     return true;
 }
 
+bool VkmCreateImage(u32 width, u32 height, VkFormat format, VkImage* image, VkDeviceMemory* imageMemory)
+{
+    VkImageCreateInfo imageCreateInfo = {};
+    imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    imageCreateInfo.pNext = nullptr;
+    imageCreateInfo.flags = 0;
+    imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
+    imageCreateInfo.format = format;
+    imageCreateInfo.extent.width = width;
+    imageCreateInfo.extent.height = height;
+    imageCreateInfo.extent.depth = 1;
+    imageCreateInfo.mipLevels = 1;
+    imageCreateInfo.arrayLayers = 1;
+    imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+    imageCreateInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+    imageCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    imageCreateInfo.queueFamilyIndexCount = 1;
+    imageCreateInfo.pQueueFamilyIndices = (u32*)&vkm.graphicsQueueIndex;
+    imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+    VK_CALL(vkCreateImage(vkm.vkDevice, &imageCreateInfo, nullptr, image), "Could not create image");
+
+    VkMemoryRequirements memRequirements = {};
+    vkGetImageMemoryRequirements(vkm.vkDevice, *image, &memRequirements);
+    VkMemoryAllocateInfo memoryAllocateInfo = {};
+    memoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    memoryAllocateInfo.pNext = nullptr;
+    memoryAllocateInfo.allocationSize = memRequirements.size;
+    memoryAllocateInfo.memoryTypeIndex = VkmFindMemoryTypeIndex(memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    if (memoryAllocateInfo.memoryTypeIndex == -1)
+    {
+        OutputDebugString("Could not find suitable memory type in physical device\n");
+        return false;
+    }
+    VK_CALL(vkAllocateMemory(vkm.vkDevice, &memoryAllocateInfo, nullptr, imageMemory), "Could not allocate memory");
+
+    vkBindImageMemory(vkm.vkDevice, *image, *imageMemory, 0);
+    return true;
+}
+
 bool VkmCreateTextureImage()
 {
     int texWidth, texHeight, texChannels;
@@ -1467,46 +1552,47 @@ bool VkmCreateTextureImage()
 
     stbi_image_free(pixels);
 
-    VkImageCreateInfo imageCreateInfo = {};
-    imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-    imageCreateInfo.pNext = nullptr;
-    imageCreateInfo.flags = 0;
-    imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
-    imageCreateInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
-    imageCreateInfo.extent.width = texWidth;
-    imageCreateInfo.extent.height = texHeight;
-    imageCreateInfo.extent.depth = 1;
-    imageCreateInfo.mipLevels = 1;
-    imageCreateInfo.arrayLayers = 1;
-    imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-    imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-    imageCreateInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-    imageCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    imageCreateInfo.queueFamilyIndexCount = 1;
-    imageCreateInfo.pQueueFamilyIndices = (u32*)&vkm.graphicsQueueIndex;
-    imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    // VkImageCreateInfo imageCreateInfo = {};
+    // imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    // imageCreateInfo.pNext = nullptr;
+    // imageCreateInfo.flags = 0;
+    // imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
+    // imageCreateInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
+    // imageCreateInfo.extent.width = texWidth;
+    // imageCreateInfo.extent.height = texHeight;
+    // imageCreateInfo.extent.depth = 1;
+    // imageCreateInfo.mipLevels = 1;
+    // imageCreateInfo.arrayLayers = 1;
+    // imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    // imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+    // imageCreateInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+    // imageCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    // imageCreateInfo.queueFamilyIndexCount = 1;
+    // imageCreateInfo.pQueueFamilyIndices = (u32*)&vkm.graphicsQueueIndex;
+    // imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
-    VK_CALL(vkCreateImage(vkm.vkDevice, &imageCreateInfo, nullptr, &vkm.textureImage), "Could not create image");
+    // VK_CALL(vkCreateImage(vkm.vkDevice, &imageCreateInfo, nullptr, &vkm.textureImage), "Could not create image");
 
-    VkMemoryRequirements memRequirements = {};
-    vkGetImageMemoryRequirements(vkm.vkDevice, vkm.textureImage, &memRequirements);
-    VkMemoryAllocateInfo memoryAllocateInfo = {};
-    memoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    memoryAllocateInfo.pNext = nullptr;
-    memoryAllocateInfo.allocationSize = memRequirements.size;
-    memoryAllocateInfo.memoryTypeIndex = VkmFindMemoryTypeIndex(memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-    if (memoryAllocateInfo.memoryTypeIndex == -1)
-    {
-        OutputDebugString("Could not find suitable memory type in physical device\n");
-        return false;
-    }
-    VK_CALL(vkAllocateMemory(vkm.vkDevice, &memoryAllocateInfo, nullptr, &vkm.textureImageMemory), "Could not allocate memory");
+    // VkMemoryRequirements memRequirements = {};
+    // vkGetImageMemoryRequirements(vkm.vkDevice, vkm.textureImage, &memRequirements);
+    // VkMemoryAllocateInfo memoryAllocateInfo = {};
+    // memoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    // memoryAllocateInfo.pNext = nullptr;
+    // memoryAllocateInfo.allocationSize = memRequirements.size;
+    // memoryAllocateInfo.memoryTypeIndex = VkmFindMemoryTypeIndex(memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    // if (memoryAllocateInfo.memoryTypeIndex == -1)
+    // {
+    //     OutputDebugString("Could not find suitable memory type in physical device\n");
+    //     return false;
+    // }
+    // VK_CALL(vkAllocateMemory(vkm.vkDevice, &memoryAllocateInfo, nullptr, &vkm.textureImageMemory), "Could not allocate memory");
 
-    vkBindImageMemory(vkm.vkDevice, vkm.textureImage, vkm.textureImageMemory, 0);
+    // vkBindImageMemory(vkm.vkDevice, vkm.textureImage, vkm.textureImageMemory, 0);
+    bool nvkResult = VkmCreateImage(texWidth, texHeight, VK_FORMAT_R8G8B8A8_SRGB, &vkm.textureImage, &vkm.textureImageMemory);
 
-    VkmTransitionImageLayout(&vkm.textureImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    VkmTransitionImageLayout(&vkm.textureImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT);
     VkmCopyBufferToImage(stagingBuffer, vkm.textureImage, texWidth, texHeight);
-    VkmTransitionImageLayout(&vkm.textureImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    VkmTransitionImageLayout(&vkm.textureImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT);
 
     vkDestroyBuffer(vkm.vkDevice, stagingBuffer, nullptr);
     vkFreeMemory(vkm.vkDevice, stagingBufferMemory, nullptr);
@@ -1607,4 +1693,39 @@ void VkmCleanUp()
     delete[] vkm.swapChainImageViews;
     delete[] vkm.swapChainImages;
     delete[] vkm.shaderFileBytes;
+}
+
+bool FindSupportedFormat(int candidateCount, VkFormat* candidates, VkImageTiling tiling, VkFormatFeatureFlags features, VkFormat* format)
+{
+    for (int i = 0; i < candidateCount; i++)
+    {
+        VkFormat currentFormat = candidates[i];
+        VkFormatProperties props;
+        vkGetPhysicalDeviceFormatProperties(vkm.physicalDevice, currentFormat, &props);
+
+        if (tiling == VK_IMAGE_TILING_LINEAR && (props.optimalTilingFeatures & features) == features)
+        {
+            *format = currentFormat;
+            return true;
+        }
+        if (tiling == VK_IMAGE_TILING_OPTIMAL && (props.optimalTilingFeatures & features) == features)
+        {
+            *format = currentFormat;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool FindDepthFormat(VkFormat* foundFormat)
+{
+    VkFormat findFormats[] = { VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT};
+    bool result = FindSupportedFormat(3, findFormats, VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT, foundFormat);
+    return result;
+}
+
+bool HasStencilComponent(VkFormat format) 
+{
+    return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT;
 }
