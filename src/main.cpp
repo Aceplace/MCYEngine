@@ -62,42 +62,51 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
         0, 1, 2, 2, 3, 0
     };
 
-    VkBuffer vertexBuffer = VK_NULL_HANDLE;
-    VkBuffer indexBuffer = VK_NULL_HANDLE;
-
-    VkDeviceSize vertexBufferSize = sizeof(vertices);
     VkBuffer stagingBufferForVertices = VK_NULL_HANDLE;
     VkDeviceMemory stagingBufferForVerticesMemory = VK_NULL_HANDLE;
+    VkBuffer vertexBuffer = VK_NULL_HANDLE;
+    VkDeviceMemory vertexBufferForVerticesMemory = VK_NULL_HANDLE;
+    VkDeviceSize vertexBufferSize = sizeof(vertices);
     if (!VkmCreateAndFillBuffer(vertexBufferSize, (void*)vertices, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingBufferForVertices, &stagingBufferForVerticesMemory))
     {
         OutputDebugString("Could not create vertex staging buffer\n.");
         return false;
     }
     
-    VkDeviceMemory vertexBufferForVerticesMemory = VK_NULL_HANDLE;
     if (!VkmCreateBuffer(vertexBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &vertexBuffer, &vertexBufferForVerticesMemory))
     {
         OutputDebugString("Could not create vertex staging buffer\n.");
         return false;
     }
     VkmCopyBuffer(stagingBufferForVertices, vertexBuffer, vertexBufferSize);
+
+    VkmAttachNameToObject((u64)stagingBufferForVertices, VK_OBJECT_TYPE_BUFFER, "vertex buffer stage buffer");
+    VkmAttachNameToObject((u64)stagingBufferForVerticesMemory, VK_OBJECT_TYPE_DEVICE_MEMORY, "vertex buffer stage buffer memory");
+    VkmAttachNameToObject((u64)vertexBuffer, VK_OBJECT_TYPE_BUFFER, "vertex buffer buffer");
+    VkmAttachNameToObject((u64)vertexBufferForVerticesMemory, VK_OBJECT_TYPE_DEVICE_MEMORY, "vertex buffer buffer memory");
     
-    VkDeviceSize indexBufferSize = sizeof(indices);
     VkBuffer stagingBufferForIndices = VK_NULL_HANDLE;
     VkDeviceMemory stagingBufferForIndicesMemory = VK_NULL_HANDLE;
+    VkBuffer indexBuffer = VK_NULL_HANDLE;
+    VkDeviceMemory indexBufferMemory = VK_NULL_HANDLE;
+    VkDeviceSize indexBufferSize = sizeof(indices);
     if (!VkmCreateAndFillBuffer(indexBufferSize, (void*)indices, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingBufferForIndices, &stagingBufferForIndicesMemory))
     {
         OutputDebugString("Could not create index staging buffer\n.");
         return false;
     }
     
-    VkDeviceMemory indexBufferMemory = VK_NULL_HANDLE;
     if (!VkmCreateBuffer(indexBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &indexBuffer, &indexBufferMemory))
     {
         OutputDebugString("Could not create index staging buffer\n.");
         return false;
     }
     VkmCopyBuffer(stagingBufferForIndices, indexBuffer, indexBufferSize);
+
+    VkmAttachNameToObject((u64)stagingBufferForIndices, VK_OBJECT_TYPE_BUFFER, "index buffer stage buffer");
+    VkmAttachNameToObject((u64)stagingBufferForIndicesMemory, VK_OBJECT_TYPE_DEVICE_MEMORY, "index buffer stage buffer memory");
+    VkmAttachNameToObject((u64)indexBuffer, VK_OBJECT_TYPE_BUFFER, "index buffer buffer");
+    VkmAttachNameToObject((u64)indexBufferMemory, VK_OBJECT_TYPE_DEVICE_MEMORY, "index buffer buffer memory");
 
     ShowWindow(_hwnd, nCmdShow);        
     MSG msg = { };
@@ -150,7 +159,20 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
             break;
         }
     }   
+
+    if (vkm.vkDevice != VK_NULL_HANDLE)
+        vkDeviceWaitIdle(vkm.vkDevice);
+    vkDestroyBuffer(vkm.vkDevice, vertexBuffer, nullptr);
+    vkFreeMemory(vkm.vkDevice, vertexBufferForVerticesMemory, nullptr);
+    vkDestroyBuffer(vkm.vkDevice, stagingBufferForVertices, nullptr);
+    vkFreeMemory(vkm.vkDevice, stagingBufferForVerticesMemory, nullptr);
+    
+    vkDestroyBuffer(vkm.vkDevice, indexBuffer, nullptr);
+    vkFreeMemory(vkm.vkDevice, indexBufferMemory, nullptr);
+    vkDestroyBuffer(vkm.vkDevice, stagingBufferForIndices, nullptr);
+    vkFreeMemory(vkm.vkDevice, stagingBufferForIndicesMemory, nullptr);
     VkmCleanUp();
+    
     OutputDebugString("Cleaned up Vulkan");
 
     return 0;

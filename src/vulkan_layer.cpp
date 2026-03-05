@@ -66,6 +66,7 @@ struct VkMState
     PFN_vkDestroyDebugUtilsMessengerEXT pfnDestroyDebugUtilsMessengerEXT;
     char* shaderFileBytes;
     VkPhysicalDevice physicalDevice;
+    PFN_vkSetDebugUtilsObjectNameEXT pfnSetDebugUtilsObjectNameEXT;
     
     VkDevice vkDevice;
     VkSurfaceCapabilitiesKHR surfaceCapabilities; 
@@ -120,6 +121,7 @@ bool VkmCreateAndFillBuffer(VkDeviceSize size, void* data, VkBufferUsageFlags us
 bool VkmCreateBuffer(VkDeviceSize size, VkBufferUsageFlags usageFlags, VkMemoryPropertyFlags memoryPropertyFlags, VkBuffer* buffer, VkDeviceMemory* bufferMemory);
 bool VkmRecreateSwapChain();
 bool VkmCreateTextureImage();
+bool VkmCreateTextureImage();
 bool VkmCreateImageView(VkImage* image, VkFormat format, VkImageView* imageView);
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL VkmDebgCallback(
@@ -133,6 +135,16 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL VkmDebgCallback(
     OutputDebugString(messageBuffer);
     
     return VK_FALSE;
+}
+
+void VkmAttachNameToObject(u64 handle, VkObjectType objectType, char* name)
+{
+    VkDebugUtilsObjectNameInfoEXT nameInfo = {};
+    nameInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
+    nameInfo.objectType = objectType;
+    nameInfo.objectHandle = handle;
+    nameInfo.pObjectName = name;
+    vkm.pfnSetDebugUtilsObjectNameEXT(vkm.vkDevice, &nameInfo);
 }
 
 bool VkmInitialize()
@@ -239,7 +251,7 @@ bool VkmInitialize()
         OutputDebugString("Could not get function vkDestroyDebugUtilsMessengerEXT\n");
         return false;
     }
-
+    
     VkDebugUtilsMessengerCreateInfoEXT vkDebugUtilsMessengerCreateInfoEXT;
     vkDebugUtilsMessengerCreateInfoEXT.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
     vkDebugUtilsMessengerCreateInfoEXT.pNext = nullptr;
@@ -250,7 +262,6 @@ bool VkmInitialize()
                                                      VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
     vkDebugUtilsMessengerCreateInfoEXT.pfnUserCallback = VkmDebgCallback;
     vkDebugUtilsMessengerCreateInfoEXT.pUserData = nullptr;
-    vkResult = pfnCreateDebugUtilsMessengerEXT(vkm.vkInstance, &vkDebugUtilsMessengerCreateInfoEXT, nullptr, &vkm.vKDebugUtilsMessengerExt);
 
     if (vkResult != VK_SUCCESS)
     {
@@ -459,6 +470,8 @@ bool VkmInitialize()
     vkDeviceCreateInfo.ppEnabledExtensionNames = deviceExtensions;
     vkDeviceCreateInfo.pEnabledFeatures = nullptr;
     vkResult = vkCreateDevice(vkm.physicalDevice, &vkDeviceCreateInfo, nullptr, &vkm.vkDevice);
+
+    vkm.pfnSetDebugUtilsObjectNameEXT = (PFN_vkSetDebugUtilsObjectNameEXT) vkGetDeviceProcAddr(vkm.vkDevice, "vkSetDebugUtilsObjectNameEXT");
 
     if (vkResult != VK_SUCCESS)
     {
@@ -762,6 +775,8 @@ bool VkmInitialize()
             return false;   
         }
 
+        VkmAttachNameToObject((u64)vkm.uniformBuffers[i], VK_OBJECT_TYPE_BUFFER, "uniform buffer");
+
         VkResult vkResult = vkMapMemory(vkm.vkDevice, vkm.uniformBuffersMemory[i], 0, uniformBufferSize, 0, &vkm.uniformBuffersMapped[i]);
         if (vkResult != VK_SUCCESS)
         {
@@ -906,47 +921,6 @@ bool VkmInitialize()
     // VkImageSubresourceRange    textureImageViewCreateInfo.subresourceRange;
 
     return true;
-}
-
-void VkmCleanUp()
-{
-    if (vkm.vkDevice != VK_NULL_HANDLE)
-        vkDeviceWaitIdle(vkm.vkDevice);
-
-    for (u32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
-    {
-        if (vkm.acquireSemaphores[i] != VK_NULL_HANDLE)
-            vkDestroySemaphore(vkm.vkDevice, vkm.acquireSemaphores[i], nullptr);
-        if (vkm.frameFences[i] != VK_NULL_HANDLE)
-            vkDestroyFence(vkm.vkDevice, vkm.frameFences[i], nullptr);
-    }
-    for (u32 i = 0; i < vkm.swapChainImagesCount; i++)
-    {
-        if (vkm.submitSemaphores[i] != VK_NULL_HANDLE)
-            vkDestroySemaphore(vkm.vkDevice, vkm.submitSemaphores[i], nullptr);
-    }
-    vkDestroyPipeline(vkm.vkDevice, vkm.graphicsPipeline, nullptr);
-    vkDestroyPipelineLayout(vkm.vkDevice, vkm.pipelineLayout, nullptr);
-    vkDestroyCommandPool(vkm.vkDevice, vkm.commandPool, nullptr);
-    vkDestroyShaderModule(vkm.vkDevice, vkm.shaderModule, nullptr);
-    if (vkm.swapChainImageViews)
-    {
-        for (u32 i = 0; i < vkm.swapChainImagesCount; i++)
-        {
-            if (vkm.swapChainImageViews[i] != VK_NULL_HANDLE)
-                vkDestroyImageView(vkm.vkDevice, vkm.swapChainImageViews[i], nullptr);
-        }
-    }
-    if (vkm.swapChain != VK_NULL_HANDLE)
-         vkDestroySwapchainKHR(vkm.vkDevice, vkm.swapChain, nullptr);
-    vkDestroyDevice(vkm.vkDevice, NULL);
-    vkDestroySurfaceKHR(vkm.vkInstance, vkm.surface, NULL);
-    // pfnDestroyDebugUtilsMessengerEXT(vkm.vkInstance, vKDebugUtilsMessengerExt, NULL);
-    vkDestroyInstance(vkm.vkInstance, NULL);
-
-    delete[] vkm.swapChainImageViews;
-    delete[] vkm.swapChainImages;
-    delete[] vkm.shaderFileBytes;
 }
 
 bool VkmCreateImageView(VkImage* image, VkFormat format, VkImageView* imageView)
@@ -1223,7 +1197,7 @@ bool VkmCreateAndFillBuffer(VkDeviceSize size, void* data, VkBufferUsageFlags us
         return false;
     }
 
-    vkBindBufferMemory(vkm.vkDevice, *buffer, *bufferMemory, 0);
+    // vkBindBufferMemory(vkm.vkDevice, *buffer, *bufferMemory, 0);
     void* mappedMemory = nullptr;
     VkResult vkResult = vkMapMemory(vkm.vkDevice, *bufferMemory, 0, size, 0, &mappedMemory);
     if (vkResult != VK_SUCCESS)
@@ -1702,6 +1676,205 @@ bool VkmCreateTextureImage()
     VkmTransitionImageLayout(&vkm.textureImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
     VkmCopyBufferToImage(stagingBuffer, vkm.textureImage, texWidth, texHeight);
     VkmTransitionImageLayout(&vkm.textureImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+    vkDestroyBuffer(vkm.vkDevice, stagingBuffer, nullptr);
+    vkFreeMemory(vkm.vkDevice, stagingBufferMemory, nullptr);
     
     return true;
+}
+
+
+//      VkInstance vkInstance;
+//     VkDebugUtilsMessengerEXT vKDebugUtilsMessengerExt;
+//     PFN_vkDestroyDebugUtilsMessengerEXT pfnDestroyDebugUtilsMessengerEXT;
+//     char* shaderFileBytes;
+//     VkPhysicalDevice physicalDevice;
+    
+//     VkDevice vkDevice;
+//     VkSurfaceCapabilitiesKHR surfaceCapabilities; 
+//     VkSurfaceKHR surface;
+//     VkSurfaceFormatKHR surfaceFormat;
+//     VkExtent2D extent;
+    
+//     VkSwapchainKHR swapChain;
+//     VkFormat swapChainImageFormat;
+//     u32 swapChainImagesCount;
+//     u32 imageCount;
+//     VkImage* swapChainImages;
+//     VkImageView* swapChainImageViews;
+//     VkExtent2D swapChainExtent;
+//     VkPresentModeKHR presentMode;
+//     bool framebufferResized;
+//     u32 imageIndex;
+
+//     VkPipeline graphicsPipeline;
+//     VkShaderModule shaderModule;
+    
+//     VkBuffer uniformBuffers[MAX_FRAMES_IN_FLIGHT];
+//     VkDeviceMemory uniformBuffersMemory[MAX_FRAMES_IN_FLIGHT];
+//     void* uniformBuffersMapped[MAX_FRAMES_IN_FLIGHT];
+//     VkDescriptorPool descriptorPool;
+//     VkDescriptorSetLayout descriptorSetLayouts[MAX_FRAMES_IN_FLIGHT];
+//     VkDescriptorSet descriptorSets[MAX_FRAMES_IN_FLIGHT];
+    
+//     VkCommandPool commandPool;
+//     VkCommandBuffer commandBuffers[MAX_FRAMES_IN_FLIGHT];
+//     s32 graphicsQueueIndex = -1;
+//     s32 presentQueueIndex = -1; 
+//     VkQueue graphicsQueue;
+//     VkQueue presentQueue;
+//     VkPipelineLayout pipelineLayout;
+
+//     VkSemaphore acquireSemaphores[MAX_FRAMES_IN_FLIGHT];
+//     VkFence frameFences[MAX_FRAMES_IN_FLIGHT];
+//     VkSemaphore* submitSemaphores;
+//     u32 currentFrameInFlightIndex;
+
+//     VkImage textureImage;
+//     VkDeviceMemory textureImageMemory;
+//     VkImageView textureImageView;
+//     VkSampler textureSampler;
+
+// void VkmCleanUp()
+// {
+//     if (vkm.vkDevice != VK_NULL_HANDLE)
+//         vkDeviceWaitIdle(vkm.vkDevice);
+
+//     for (u32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+//     {
+//         if (vkm.uniformBuffers[i] != VK_NULL_HANDLE)
+//             vkDestroyBuffer(vkm.vkDevice, vkm.uniformBuffers[i], nullptr);
+//         if (vkm.uniformBuffersMemory[i] != VK_NULL_HANDLE)
+//             vkFreeMemory(vkm.vkDevice, vkm.uniformBuffersMemory[i], nullptr);
+//     }
+
+//     for (u32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+//     {
+//         if (vkm.acquireSemaphores[i] != VK_NULL_HANDLE)
+//             vkDestroySemaphore(vkm.vkDevice, vkm.acquireSemaphores[i], nullptr);
+//         if (vkm.frameFences[i] != VK_NULL_HANDLE)
+//             vkDestroyFence(vkm.vkDevice, vkm.frameFences[i], nullptr);
+//     }
+//     for (u32 i = 0; i < vkm.swapChainImagesCount; i++)
+//     {
+//         if (vkm.submitSemaphores[i] != VK_NULL_HANDLE)
+//             vkDestroySemaphore(vkm.vkDevice, vkm.submitSemaphores[i], nullptr);
+//     }
+//     vkDestroyPipeline(vkm.vkDevice, vkm.graphicsPipeline, nullptr);
+//     vkDestroyPipelineLayout(vkm.vkDevice, vkm.pipelineLayout, nullptr);
+//     vkDestroyCommandPool(vkm.vkDevice, vkm.commandPool, nullptr);
+//     vkDestroyShaderModule(vkm.vkDevice, vkm.shaderModule, nullptr);
+//     if (vkm.swapChainImageViews)
+//     {
+//         for (u32 i = 0; i < vkm.swapChainImagesCount; i++)
+//         {
+//             if (vkm.swapChainImageViews[i] != VK_NULL_HANDLE)
+//                 vkDestroyImageView(vkm.vkDevice, vkm.swapChainImageViews[i], nullptr);
+//         }
+//     }
+//     if (vkm.swapChain != VK_NULL_HANDLE)
+//          vkDestroySwapchainKHR(vkm.vkDevice, vkm.swapChain, nullptr);
+//     vkDestroyDevice(vkm.vkDevice, NULL);
+//     vkDestroySurfaceKHR(vkm.vkInstance, vkm.surface, NULL);
+//     // pfnDestroyDebugUtilsMessengerEXT(vkm.vkInstance, vKDebugUtilsMessengerExt, NULL);
+//     vkDestroyInstance(vkm.vkInstance, NULL);
+
+//     delete[] vkm.swapChainImageViews;
+//     delete[] vkm.swapChainImages;
+//     delete[] vkm.shaderFileBytes;
+// }
+
+void VkmCleanUp()
+{
+    if (vkm.vkDevice != VK_NULL_HANDLE)
+        vkDeviceWaitIdle(vkm.vkDevice);
+
+    // --- Semaphores & Fences ---
+    for (u32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+    {
+        if (vkm.acquireSemaphores[i] != VK_NULL_HANDLE)
+            vkDestroySemaphore(vkm.vkDevice, vkm.acquireSemaphores[i], nullptr);
+        if (vkm.frameFences[i] != VK_NULL_HANDLE)
+            vkDestroyFence(vkm.vkDevice, vkm.frameFences[i], nullptr);
+    }
+
+    if (vkm.submitSemaphores)
+    {
+        for (u32 i = 0; i < vkm.swapChainImagesCount; i++)
+        {
+            if (vkm.submitSemaphores[i] != VK_NULL_HANDLE)
+                vkDestroySemaphore(vkm.vkDevice, vkm.submitSemaphores[i], nullptr);
+        }
+    }
+
+    // --- Pipelines & Shader ---
+    if (vkm.graphicsPipeline != VK_NULL_HANDLE)
+        vkDestroyPipeline(vkm.vkDevice, vkm.graphicsPipeline, nullptr);
+    if (vkm.pipelineLayout != VK_NULL_HANDLE)
+        vkDestroyPipelineLayout(vkm.vkDevice, vkm.pipelineLayout, nullptr);
+    if (vkm.shaderModule != VK_NULL_HANDLE)
+        vkDestroyShaderModule(vkm.vkDevice, vkm.shaderModule, nullptr);
+
+    // --- Command Pool ---
+    if (vkm.commandPool != VK_NULL_HANDLE)
+        vkDestroyCommandPool(vkm.vkDevice, vkm.commandPool, nullptr);
+
+    // --- Uniform Buffers ---
+    for (u32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+    {
+        if (vkm.uniformBuffers[i] != VK_NULL_HANDLE)
+            vkDestroyBuffer(vkm.vkDevice, vkm.uniformBuffers[i], nullptr);
+        if (vkm.uniformBuffersMemory[i] != VK_NULL_HANDLE)
+            vkFreeMemory(vkm.vkDevice, vkm.uniformBuffersMemory[i], nullptr);
+    }
+
+    // --- Descriptor Sets & Pool ---
+    for (u32 i = 0; i < 1; i++)
+    {
+        if (vkm.descriptorSetLayouts[i] != VK_NULL_HANDLE)
+            vkDestroyDescriptorSetLayout(vkm.vkDevice, vkm.descriptorSetLayouts[i], nullptr);
+    }
+    if (vkm.descriptorPool != VK_NULL_HANDLE)
+        vkDestroyDescriptorPool(vkm.vkDevice, vkm.descriptorPool, nullptr);
+
+    // --- Texture ---
+    if (vkm.textureSampler != VK_NULL_HANDLE)
+        vkDestroySampler(vkm.vkDevice, vkm.textureSampler, nullptr);
+    if (vkm.textureImageView != VK_NULL_HANDLE)
+        vkDestroyImageView(vkm.vkDevice, vkm.textureImageView, nullptr);
+    if (vkm.textureImage != VK_NULL_HANDLE)
+        vkDestroyImage(vkm.vkDevice, vkm.textureImage, nullptr);
+    if (vkm.textureImageMemory != VK_NULL_HANDLE)
+        vkFreeMemory(vkm.vkDevice, vkm.textureImageMemory, nullptr);
+
+    // --- Swapchain Images & Views ---
+    if (vkm.swapChainImageViews)
+    {
+        for (u32 i = 0; i < vkm.swapChainImagesCount; i++)
+        {
+            if (vkm.swapChainImageViews[i] != VK_NULL_HANDLE)
+                vkDestroyImageView(vkm.vkDevice, vkm.swapChainImageViews[i], nullptr);
+        }
+    }
+
+    if (vkm.swapChain != VK_NULL_HANDLE)
+        vkDestroySwapchainKHR(vkm.vkDevice, vkm.swapChain, nullptr);
+
+    // --- Device, Surface, Debug Messenger, Instance ---
+    if (vkm.vkDevice != VK_NULL_HANDLE)
+        vkDestroyDevice(vkm.vkDevice, nullptr);
+
+    if (vkm.surface != VK_NULL_HANDLE)
+        vkDestroySurfaceKHR(vkm.vkInstance, vkm.surface, nullptr);
+
+    if (vkm.vKDebugUtilsMessengerExt != VK_NULL_HANDLE && vkm.pfnDestroyDebugUtilsMessengerEXT)
+        vkm.pfnDestroyDebugUtilsMessengerEXT(vkm.vkInstance, vkm.vKDebugUtilsMessengerExt, nullptr);
+
+    if (vkm.vkInstance != VK_NULL_HANDLE)
+        vkDestroyInstance(vkm.vkInstance, nullptr);
+
+    // --- Free heap memory ---
+    delete[] vkm.swapChainImageViews;
+    delete[] vkm.swapChainImages;
+    delete[] vkm.shaderFileBytes;
 }
