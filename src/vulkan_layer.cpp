@@ -95,9 +95,10 @@ struct VkMState
     bool framebufferResized;
     u32 imageIndex;
 
-    // VkImage depthImage;
-    // VkDeviceMemory depthImageMemory;
-    // VkImageView depthImageView;
+    VkImage depthImage;
+    VkDeviceMemory depthImageMemory;
+    VkImageView depthImageView;
+    VkFormat depthFormat;
 
     VkPipeline graphicsPipeline;
     VkShaderModule shaderModule;
@@ -137,9 +138,9 @@ bool VkmRecreateSwapChain();
 bool VkmCreateTextureImage();
 bool VkmCreateImageView(VkImage* image, VkFormat format, VkImageView* imageView, VkImageAspectFlags aspectFlags);
 bool FindSupportedFormat(int candidateCount, VkFormat* candidates, VkImageTiling tiling, VkFormatFeatureFlags features, VkFormat* format);
-bool FindDepthFormat(VkFormat* format);
+bool FindDepthFormat();
 bool HasStencilComponent(VkFormat format);
-bool VkmCreateImage(u32 width, u32 height, VkFormat format, VkImage* image, VkDeviceMemory* imageMemory);
+bool VkmCreateImage(u32 width, u32 height, VkFormat format, VkImageUsageFlags vkImageUsageFlags, VkImage* image, VkDeviceMemory* imageMemory);
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL VkmDebgCallback(
     VkDebugUtilsMessageSeverityFlagBitsEXT   messageSeverity,
@@ -512,18 +513,21 @@ bool VkmInitialize()
         return false;
     }
 
-    // VkFormat depthFormat;
-    // FindDepthFormat(&depthFormat);
-    // if (!VkmCreateImage(vkm.swapChainExtent.width, vkm.swapChainExtent.height, depthFormat, &vkm.depthImage, &vkm.depthImageMemory))
-    // {
-    //     OutputDebugString("Failed to create depth image\n");
-    //     return false;
-    // }
-    // if (!VkmCreateImageView(&vkm.depthImage, depthFormat, &vkm.depthImageView, VK_IMAGE_ASPECT_DEPTH_BIT))
-    // {
-    //     OutputDebugString("Failed to depth image view\n");
-    //     return false;
-    // }
+    if (!FindDepthFormat())
+    {
+        OutputDebugString("Could not find depth format\n");
+        return false;
+    }
+    if (!VkmCreateImage(vkm.swapChainExtent.width, vkm.swapChainExtent.height, vkm.depthFormat, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, &vkm.depthImage, &vkm.depthImageMemory))
+    {
+        OutputDebugString("Failed to create depth image\n");
+        return false;
+    }
+    if (!VkmCreateImageView(&vkm.depthImage, vkm.depthFormat, &vkm.depthImageView, VK_IMAGE_ASPECT_DEPTH_BIT))
+    {
+        OutputDebugString("Failed to depth image view\n");
+        return false;
+    }
     
     st shaderFileSize = 0;
     
@@ -677,6 +681,20 @@ bool VkmInitialize()
     pipelineColorBlendStateCreateInfo.blendConstants[2] = 0;
     pipelineColorBlendStateCreateInfo.blendConstants[3] = 0;
 
+    VkPipelineDepthStencilStateCreateInfo depthStencil = {};
+    depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    depthStencil.pNext = NULL;
+    depthStencil.flags = 0;
+    depthStencil.depthTestEnable = true;
+    depthStencil.depthWriteEnable = true;
+    depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
+    depthStencil.depthBoundsTestEnable = false;
+    depthStencil.stencilTestEnable = false;
+    depthStencil.minDepthBounds = 0.0f;
+    depthStencil.maxDepthBounds = 1.0f;
+    // depthStencil.front = (VkStencilOpState){};
+    // depthStencil.back  = (VkStencilOpState){};
+
     VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = {};
     pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutCreateInfo.pNext = nullptr;
@@ -693,7 +711,7 @@ bool VkmInitialize()
     pipelineRenderingCreateInfo.viewMask = 0;
     pipelineRenderingCreateInfo.colorAttachmentCount = 1;
     pipelineRenderingCreateInfo.pColorAttachmentFormats = &vkm.swapChainImageFormat;
-    pipelineRenderingCreateInfo.depthAttachmentFormat = VK_FORMAT_UNDEFINED;
+    pipelineRenderingCreateInfo.depthAttachmentFormat = vkm.depthFormat;
     pipelineRenderingCreateInfo.stencilAttachmentFormat = VK_FORMAT_UNDEFINED;
 
     VkGraphicsPipelineCreateInfo graphicsPipelineCreateInfo = {};
@@ -708,7 +726,7 @@ bool VkmInitialize()
     graphicsPipelineCreateInfo.pViewportState = &pipelineViewportStateCreateInfo;
     graphicsPipelineCreateInfo.pRasterizationState = &pipelineRasterizationStateCreateInfo;
     graphicsPipelineCreateInfo.pMultisampleState = &pipelineMultisampleStateCreateInfo;
-    graphicsPipelineCreateInfo.pDepthStencilState = nullptr;
+    graphicsPipelineCreateInfo.pDepthStencilState = &depthStencil;
     graphicsPipelineCreateInfo.pColorBlendState = &pipelineColorBlendStateCreateInfo;
     graphicsPipelineCreateInfo.pDynamicState = &pipelineDynamicStateCreateInfo;
     graphicsPipelineCreateInfo.layout = vkm.pipelineLayout;
@@ -1324,44 +1342,79 @@ bool VkmSetupForFrameRendering(VkCommandBuffer commandBuffer)
     commandBufferBeginInfo.pInheritanceInfo = nullptr;
     vkBeginCommandBuffer(commandBuffer, &commandBufferBeginInfo);
 
-    VkImageMemoryBarrier2 barrier = {};
-    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-    barrier.pNext = nullptr;
-    barrier.srcAccessMask = 0;
-    barrier.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT_KHR;
-    barrier.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-    barrier.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-    barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.image = vkm.swapChainImages[vkm.imageIndex];
+    VkImageMemoryBarrier2 imageBarrier = {};
+    imageBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+    imageBarrier.pNext = nullptr;
+    imageBarrier.srcAccessMask = 0;
+    imageBarrier.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+    imageBarrier.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
+    imageBarrier.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    imageBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    imageBarrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    imageBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    imageBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    imageBarrier.image = vkm.swapChainImages[vkm.imageIndex];
 
-    VkImageSubresourceRange imageSubresourceName = {};
-    imageSubresourceName.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    imageSubresourceName.baseMipLevel = 0;
-    imageSubresourceName.levelCount = 1;
-    imageSubresourceName.baseArrayLayer = 0;
-    imageSubresourceName.layerCount = 1;
-    barrier.subresourceRange = imageSubresourceName;
+    imageBarrier.subresourceRange = {};
+    imageBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    imageBarrier.subresourceRange.baseMipLevel = 0;
+    imageBarrier.subresourceRange.levelCount = 1;
+    imageBarrier.subresourceRange.baseArrayLayer = 0;
+    imageBarrier.subresourceRange.layerCount = 1;
+
+    // VkDependencyInfo dependencyInfo = {};
+    // dependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+    // dependencyInfo.pNext = nullptr;
+    // dependencyInfo.dependencyFlags = 0;
+    // dependencyInfo.memoryBarrierCount = 0;
+    // dependencyInfo.pMemoryBarriers = nullptr;
+    // dependencyInfo.bufferMemoryBarrierCount = 0;
+    // dependencyInfo.pBufferMemoryBarriers = nullptr;
+    // dependencyInfo.imageMemoryBarrierCount = 1;
+    // dependencyInfo.pImageMemoryBarriers = &imageBarrier;
+
+    VkImageMemoryBarrier2 depthBarrier = {};
+    depthBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+    depthBarrier.pNext = nullptr;
+    depthBarrier.srcAccessMask = 0;
+    depthBarrier.dstAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    depthBarrier.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
+    depthBarrier.dstStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
+    depthBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    depthBarrier.newLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
+    depthBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    depthBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    depthBarrier.image = vkm.depthImage;
+
+    depthBarrier.subresourceRange = {};
+    depthBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+    depthBarrier.subresourceRange.baseMipLevel = 0;
+    depthBarrier.subresourceRange.levelCount = 1;
+    depthBarrier.subresourceRange.baseArrayLayer = 0;
+    depthBarrier.subresourceRange.layerCount = 1;
+
+    // VkDependencyInfo depthDependency = {};
+    // depthDependency.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+    // depthDependency.imageMemoryBarrierCount = 1;
+    // depthDependency.pImageMemoryBarriers = &depthBarrier;
+
+    VkImageMemoryBarrier2 barriers[] = {
+        imageBarrier, depthBarrier
+    };
 
     VkDependencyInfo dependencyInfo = {};
     dependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
-    dependencyInfo.pNext = nullptr;
-    dependencyInfo.dependencyFlags = 0;
-    dependencyInfo.memoryBarrierCount = 0;
-    dependencyInfo.pMemoryBarriers = nullptr;
-    dependencyInfo.bufferMemoryBarrierCount = 0;
-    dependencyInfo.pBufferMemoryBarriers = nullptr;
-    dependencyInfo.imageMemoryBarrierCount = 1;
-    dependencyInfo.pImageMemoryBarriers = &barrier;
+    dependencyInfo.imageMemoryBarrierCount = 2;
+    dependencyInfo.pImageMemoryBarriers = barriers;
+    
     vkCmdPipelineBarrier2(commandBuffer, &dependencyInfo);
-
+    
     VkClearValue clearColor = {};
     clearColor.color.float32[0] = 0.0f;
     clearColor.color.float32[1] = 0.0f;
     clearColor.color.float32[2] = 0.0f;
     clearColor.color.float32[3] = 1.0f;
+
     VkClearValue clearDepth = {};
     clearDepth.depthStencil.depth = 1;
     
@@ -1377,32 +1430,30 @@ bool VkmSetupForFrameRendering(VkCommandBuffer commandBuffer)
     colorAttachmentInfo.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
     colorAttachmentInfo.clearValue = clearColor;  
     
-    // VkRenderingAttachmentInfo depthAttachmentInfo = {};
-    // depthAttachmentInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-    // depthAttachmentInfo.pNext = nullptr;
-    // depthAttachmentInfo.imageView = vkm.depthImageView;
-    // depthAttachmentInfo.imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
-    // depthAttachmentInfo.resolveMode = VK_RESOLVE_MODE_NONE;
-    // depthAttachmentInfo.resolveImageView = VK_NULL_HANDLE;
-    // depthAttachmentInfo.resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    // depthAttachmentInfo.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    // depthAttachmentInfo.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    // depthAttachmentInfo.clearValue = clearDepth;
+    VkRenderingAttachmentInfo depthAttachmentInfo = {};
+    depthAttachmentInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+    depthAttachmentInfo.pNext = nullptr;
+    depthAttachmentInfo.imageView = vkm.depthImageView;
+    depthAttachmentInfo.imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
+    depthAttachmentInfo.resolveMode = VK_RESOLVE_MODE_NONE;
+    depthAttachmentInfo.resolveImageView = VK_NULL_HANDLE;
+    depthAttachmentInfo.resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    depthAttachmentInfo.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    depthAttachmentInfo.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    depthAttachmentInfo.clearValue = clearDepth;
 
     VkRenderingInfo renderingInfo = {};
     renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
     renderingInfo.pNext = nullptr;
     renderingInfo.flags = 0;
-    VkRect2D renderArea = {};
-    renderArea.offset.x = 0;
-    renderArea.offset.y = 0;
-    renderArea.extent = vkm.swapChainExtent;
-    renderingInfo.renderArea = renderArea;
+    renderingInfo.renderArea.offset.x = 0;
+    renderingInfo.renderArea.offset.y = 0;
+    renderingInfo.renderArea.extent = vkm.swapChainExtent;
     renderingInfo.layerCount = 1;
     renderingInfo.viewMask = 0;
     renderingInfo.colorAttachmentCount = 1;
     renderingInfo.pColorAttachments = &colorAttachmentInfo;
-    renderingInfo.pDepthAttachment = nullptr;
+    renderingInfo.pDepthAttachment = &depthAttachmentInfo;
     renderingInfo.pStencilAttachment = nullptr;
 
     vkCmdBeginRendering(commandBuffer, &renderingInfo);
@@ -1506,7 +1557,7 @@ bool VkmEndRenderingAndSetupForPresent(VkCommandBuffer commandBuffer)
     return true;
 }
 
-bool VkmCreateImage(u32 width, u32 height, VkFormat format, VkImage* image, VkDeviceMemory* imageMemory)
+bool VkmCreateImage(u32 width, u32 height, VkFormat format, VkImageUsageFlags vkImageUsageFlags, VkImage* image, VkDeviceMemory* imageMemory)
 {
     VkImageCreateInfo imageCreateInfo = {};
     imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -1521,7 +1572,8 @@ bool VkmCreateImage(u32 width, u32 height, VkFormat format, VkImage* image, VkDe
     imageCreateInfo.arrayLayers = 1;
     imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
     imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-    imageCreateInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+    imageCreateInfo.usage = vkImageUsageFlags;
+    // imageCreateInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
     imageCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     imageCreateInfo.queueFamilyIndexCount = 1;
     imageCreateInfo.pQueueFamilyIndices = (u32*)&vkm.graphicsQueueIndex;
@@ -1602,7 +1654,7 @@ bool VkmCreateTextureImage()
     // VK_CALL(vkAllocateMemory(vkm.vkDevice, &memoryAllocateInfo, nullptr, &vkm.textureImageMemory), "Could not allocate memory");
 
     // vkBindImageMemory(vkm.vkDevice, vkm.textureImage, vkm.textureImageMemory, 0);
-    bool nvkResult = VkmCreateImage(texWidth, texHeight, VK_FORMAT_R8G8B8A8_SRGB, &vkm.textureImage, &vkm.textureImageMemory);
+    bool nvkResult = VkmCreateImage(texWidth, texHeight, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, &vkm.textureImage, &vkm.textureImageMemory);
 
     VkmTransitionImageLayout(&vkm.textureImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT);
     VkmCopyBufferToImage(stagingBuffer, vkm.textureImage, texWidth, texHeight);
@@ -1732,10 +1784,10 @@ bool FindSupportedFormat(int candidateCount, VkFormat* candidates, VkImageTiling
     return false;
 }
 
-bool FindDepthFormat(VkFormat* foundFormat)
+bool FindDepthFormat()
 {
     VkFormat findFormats[] = { VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT};
-    bool result = FindSupportedFormat(3, findFormats, VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT, foundFormat);
+    bool result = FindSupportedFormat(3, findFormats, VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT, &vkm.depthFormat);
     return result;
 }
 
