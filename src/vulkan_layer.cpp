@@ -172,12 +172,10 @@ bool VkmInitialize()
     vkm.graphicsQueueIndex = -1;
     vkm.presentQueueIndex = -1;
 
-    VkApplicationInfo vkApplicationInfo;
+    VkApplicationInfo vkApplicationInfo = {};
     vkApplicationInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-    vkApplicationInfo.pNext = nullptr;
     vkApplicationInfo.pApplicationName = "mcy_engine";
     vkApplicationInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
-    vkApplicationInfo.pEngineName = nullptr;
     vkApplicationInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
     vkApplicationInfo.apiVersion = VK_API_VERSION_1_4;
 
@@ -212,7 +210,7 @@ bool VkmInitialize()
         }
 
         if (!foundLayer)
-                foundAllLayers = false;
+            foundAllLayers = false;
     }
 
     if (!foundAllLayers)
@@ -222,10 +220,8 @@ bool VkmInitialize()
     }
     OutputDebugString("Found all validation layers.");    
 
-    VkInstanceCreateInfo vkInstanceCreateInfo;
+    VkInstanceCreateInfo vkInstanceCreateInfo = {};
     vkInstanceCreateInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-    vkInstanceCreateInfo.pNext = nullptr;
-    vkInstanceCreateInfo.flags = 0;
     vkInstanceCreateInfo.pApplicationInfo = &vkApplicationInfo;
     vkInstanceCreateInfo.enabledLayerCount = validationLayerCount;
     vkInstanceCreateInfo.ppEnabledLayerNames = validationLayers;
@@ -234,10 +230,8 @@ bool VkmInitialize()
 
     VK_CALL(vkCreateInstance(&vkInstanceCreateInfo, nullptr, &vkm.vkInstance), "Could not create Vulkan instance");
 
-    VkWin32SurfaceCreateInfoKHR win32SurfaceCreateInfo{};
+    VkWin32SurfaceCreateInfoKHR win32SurfaceCreateInfo = {};
     win32SurfaceCreateInfo.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
-    win32SurfaceCreateInfo.pNext = nullptr;
-    win32SurfaceCreateInfo.flags = 0;
     win32SurfaceCreateInfo.hwnd = _hwnd;
     win32SurfaceCreateInfo.hinstance = GetModuleHandle(nullptr);
 
@@ -1719,7 +1713,14 @@ void VkmCleanUp()
     if (vkm.descriptorPool != VK_NULL_HANDLE)
         vkDestroyDescriptorPool(vkm.vkDevice, vkm.descriptorPool, nullptr);
 
-    // --- Texture ---
+    // --- Textures ---
+    if (vkm.depthImageView != VK_NULL_HANDLE)
+        vkDestroyImageView(vkm.vkDevice, vkm.depthImageView, nullptr);
+    if (vkm.depthImage != VK_NULL_HANDLE)
+        vkDestroyImage(vkm.vkDevice, vkm.depthImage, nullptr);
+    if (vkm.textureImageMemory != VK_NULL_HANDLE)
+        vkFreeMemory(vkm.vkDevice, vkm.depthImageMemory, nullptr);
+    
     if (vkm.textureSampler != VK_NULL_HANDLE)
         vkDestroySampler(vkm.vkDevice, vkm.textureSampler, nullptr);
     if (vkm.textureImageView != VK_NULL_HANDLE)
