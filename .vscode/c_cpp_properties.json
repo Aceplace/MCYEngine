@@ -5,7 +5,7 @@
       "includePath": [
         "${workspaceFolder}/**",
         "${env:VULKAN_SDK}/Include",
-        "${workspaceFolder}/src/vendor/glm/**"
+        "${workspaceFolder}/src/vendor/**"
       ],
       "defines": [
       ],

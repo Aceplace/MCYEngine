@@ -1,3 +1,4 @@
+
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include "mcy_helpers.h"
 #include "vulkan_layer.cpp"
@@ -51,6 +52,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
     //     {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
     //     {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
     // };
+    
     const Vertex vertices[] = {
         {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
         {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
@@ -68,7 +70,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
         4, 5, 6, 6, 7, 4
     };
     
-
     VkBuffer stagingBufferForVertices = VK_NULL_HANDLE;
     VkDeviceMemory stagingBufferForVerticesMemory = VK_NULL_HANDLE;
     VkBuffer vertexBuffer = VK_NULL_HANDLE;

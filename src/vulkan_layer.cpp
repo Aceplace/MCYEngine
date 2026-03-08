@@ -22,6 +22,10 @@ struct UniformBufferObject
     alignas(16) glm::mat4 proj;
 };
 
+const char* statueTextturePath = "assets/textures/texture.jpg";
+const char* roomTexturePath = "assets/textures/viking_room.png";
+const char* roomModelPath = "assets/models/viking_room.obj";
+
 VkVertexInputBindingDescription VertexGetBindingDescription()
 {
     VkVertexInputBindingDescription result = {};
@@ -62,7 +66,7 @@ VkVertexInputAttributeDescription* VertexGetInputAttributeDescription()
         if (_vkResult != VK_SUCCESS) {         \
             OutputDebugString(msg);            \
             OutputDebugString("\n");            \
-            return true;                      \
+            return false;                      \
         }                                      \
     } while (0)
 
@@ -757,7 +761,7 @@ bool VkmInitialize()
             return false;   
         }
 
-        VkmAttachNameToObject((u64)vkm.uniformBuffers[i], VK_OBJECT_TYPE_BUFFER, "uniform buffer");
+        // VkmAttachNameToObject((u64)vkm.uniformBuffers[i], VK_OBJECT_TYPE_BUFFER, "uniform buffer");
 
         VkResult vkResult = vkMapMemory(vkm.vkDevice, vkm.uniformBuffersMemory[i], 0, uniformBufferSize, 0, &vkm.uniformBuffersMapped[i]);
         if (vkResult != VK_SUCCESS)
@@ -1001,7 +1005,7 @@ bool VkmTransitionImageLayout(VkImage *image,
     }
 
     VkImageMemoryBarrier2 barrier = {};
-    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
     barrier.pNext = nullptr;
     barrier.srcAccessMask = 0;
     barrier.dstAccessMask = 0;
@@ -1593,10 +1597,11 @@ bool VkmCreateImage(u32 width, u32 height, VkFormat format, VkImageUsageFlags vk
     return true;
 }
 
+// bool VkmCreateTextureImage(char* filePath)
 bool VkmCreateTextureImage()
 {
     int texWidth, texHeight, texChannels;
-    stbi_uc* pixels = stbi_load("textures/texture.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+    stbi_uc* pixels = stbi_load(statueTextturePath, &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
     VkDeviceSize imageSize = texWidth * texHeight * 4;
 
     if (!pixels) 
